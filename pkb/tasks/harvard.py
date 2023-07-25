@@ -64,7 +64,7 @@ class HarvardIndexDetailTask(BaseTask):
         with self.output().open('w') as outf:  
             
             start_time = time.time()  
-            
+            collector_ids.reverse()
             for collector_id in tqdm(collector_ids):              
                 collector = self._parse_detail_page(collector_id)
                 if botanist_id := collector.get('ASA Botanist ID'):                
@@ -92,13 +92,14 @@ class HarvardIndexDetailTask(BaseTask):
         
         try:
             table = soup.find('table')
+            trs = table.find_all('tr')
         except AttributeError:       
             logger.error('Could not parse harvard detail page for %s', collector_id)
             return
         
         collector = {}
         
-        for tr in table.find_all('tr'):
+        for tr in trs:
 
             label = tr.find('td', {"class":"cap"}).get_text(strip=True)
             val = tr.find('td', {"class":"val"}).get_text(strip=True)            

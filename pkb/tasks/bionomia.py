@@ -259,6 +259,7 @@ class BionomiaClaimsTask(luigi.ExternalTask):
     url = 'https://bionomia.net/data/bionomia-public-claims.csv.gz'
     
     def run(self):
+        logger.info('Downloading from %s', self.url)
         wget.download(self.url, self.output().path)
 
     def output(self): 
@@ -271,19 +272,37 @@ class BionomiaAttributionsTask(BaseTask):
     def requires(self):
         return [
             BionomiaClaimsTask(),
-            # GBIFOccurrencesTask()
+            GBIFOccurrencesTask()
         ]    
     
     def run(self):
         
-        print('YAY')
+        cols = ['gbifID']
         
-        # occurrences = dd.read_parquet(GBIFOccurrences().output().path, 
-        #     columns = cols,
-        #     dtype='str'
-        # )          
+        specimens = dd.read_parquet(GBIFOccurrencesTask().output().path, 
+            columns = cols,
+            dtype='str'
+        )    
+        
+        logger.info('Reading claims CSV')
+        
+        claims = dd.read_csv(BionomiaClaimsTask().output().path, compression='gzip')   
+        claims['Subject'] = claims['Subject'].str.replace('https://gbif.org/occurrence/','')    
+        
+        logger.info('%s claims', len(claims.index))
+        
+        # Filter claims so only this with a specimen in our GBIF download is included 
+        claims = claims[claims['Subject'].isin(specimens.gbifID)]
+        logger.info('%s filtered claims  ', len(claims.index))
+        
+        # TODO - match to collector
+        # TODO - match to 
+        claims.to_csv(self.output().path)
+        
+    def output(self): 
+        return luigi.LocalTarget(INTERMEDIATE_DIR / 'bionomia' / 'attributions.csv')  
                 
             
 if __name__ == "__main__":
     # luigi.build([ProcessSpecimenTask(image_id='011244568', force=True)], local_scheduler=True)
-    luigi.build([BionomiaCollectorsTask(force=True)], local_scheduler=True)     
+    luigi.build([BionomiaAttributionsTask(force=True)], local_scheduler=True)     

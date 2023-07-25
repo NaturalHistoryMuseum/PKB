@@ -9,19 +9,20 @@ from bs4 import BeautifulSoup
 import dask.dataframe as dd
 import csv
 import pandas as pd
+from tqdm import tqdm
 
 from pkb.config import INTERMEDIATE_DIR, CACHE_DIR, OUTPUT_DIR, logger
 from pkb.tasks.institutions import InstitutionsTask
 from pkb.tasks.base import BaseTask
 from pkb.tasks.gbif import GBIFOccurrencesTask
 
-requests_cache.install_cache(CACHE_DIR / 'gbif')
+
+tqdm.pandas()
+requests_cache.install_cache(CACHE_DIR / 'edges')
 
     
 class OccurrenceInstitutionEdges(BaseTask):
-    
-    url = 'https://api.gbif.org/v1/occurrence/download/request/0235332-230224095556074.zip'
-        
+
     def requires(self):
         return [
             GBIFOccurrencesTask(),
@@ -32,9 +33,6 @@ class OccurrenceInstitutionEdges(BaseTask):
         cols = ['gbifID','institutionCode', 'collectionCode', 'issue', 'datasetKey']
         
         specimens = dd.read_parquet(GBIFOccurrencesTask().output().path, 
-            delimiter='\t', 
-            quoting=csv.QUOTE_NONE, 
-            encoding='utf-8',
             columns = cols,
             dtype='str'
         )  
@@ -73,6 +71,10 @@ class OccurrenceInstitutionEdges(BaseTask):
     
     def output(self): 
         return luigi.LocalTarget(OUTPUT_DIR / 'occurrence-institution.edges.parquet')    
+    
+    
+# class BionomiaAttributions(BaseTask):    
+    
     
 if __name__ == "__main__":
     luigi.build([OccurrenceInstitutionEdges()], local_scheduler=True)    

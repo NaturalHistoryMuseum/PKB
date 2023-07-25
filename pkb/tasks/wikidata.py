@@ -109,4 +109,4 @@ class WikiDataCollectorsTask(BaseTask):
     
 if __name__ == "__main__":
     # luigi.build([ProcessSpecimenTask(image_id='011244568', force=True)], local_scheduler=True)
-    luigi.build([WikiDataCollectorsTask(force=True)], local_scheduler=True)
+    luigi.build([WikiDataCollectorsTask()], local_scheduler=True)
