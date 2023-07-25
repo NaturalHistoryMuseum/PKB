@@ -11,6 +11,7 @@ import string
 import itertools
 from abc import ABCMeta, abstractmethod
 from tqdm import tqdm
+from pathlib import Path
 import re
 import numpy as np
 import dask.dataframe as dd
@@ -86,7 +87,7 @@ class BionomiaSearchTask(BaseTask, metaclass=ABCMeta):
                 
         df = pd.DataFrame(collectors.values())
         logger.info(f'{len(df.index)} collectors output to {self.filename}')
-        df.astype(str).to_parquet(self.output().path, index=False)   
+        df.to_parquet(self.output().path, index=False)   
         
     def output(self):        
         return luigi.LocalTarget(INTERMEDIATE_DIR / 'bionomia' / self.filename)              
@@ -117,7 +118,7 @@ class BionomiaAggregateTask(BaseTask):
             BionomiaNonPublicSearchTask(),
         ]
         
-    def run(self):        
+    def run(self):      
         df = pd.concat([pd.read_parquet(f.path) for f in self.input()])
         df = df.reset_index()
 
@@ -127,26 +128,30 @@ class BionomiaAggregateTask(BaseTask):
 
         df[["orgs", "countries"]] = df[df.orcid.notna()].orcid.progress_apply(self.parse_collector_page)            
         logger.info(f'Added {len(df[df.orgs.notna()])} organisations and {len(df[df.countries.notna()])} countries')             
-        logger.info(f'Writing {len(df)} bionomia collectors')   
-        # Need to replace nan before casting to string for parquet  
-        df = df.replace(np.nan, None)   
-        df.astype(str).to_parquet(self.output().path, index=False)                
+        logger.info(f'Writing {len(df)} bionomia collectors')    
+        df.to_parquet(self.output().path, index=False)                
         
     def output(self):        
         return luigi.LocalTarget(INTERMEDIATE_DIR / 'bionomia' / 'aggregated.parquet')         
     
     # @staticmethod
     def parse_collector_page(self, orcid):
+        orgs = None
+        countries = None
         url = f'https://bionomia.net/{orcid}'
-        r = requests.get(url)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        if div := soup.find("div", {"itemtype": "http://schema.org/Person"}):
-            orgs = '|'.join([a['href'].replace('https://bionomia.net/organization/', '') for a in div.findAll('a', href=self.re_org)])
-            countries = '|'.join([a['href'].replace('https://bionomia.net/country/', '') for a in div.findAll('a', href=self.re_country)])
+        try:
+            r = requests.get(url)
+        except requests.exceptions.ConnectionError:
+            logger.error('Connection error')
         else:
-            orgs = None
-            countries = None
-            
+            soup = BeautifulSoup(r.text, 'html.parser')
+            if div := soup.find("div", {"itemtype": "http://schema.org/Person"}):
+                if parsed_orgs := '|'.join([a['href'].replace('https://bionomia.net/organization/', '') for a in div.findAll('a', href=self.re_org)]):
+                    orgs = parsed_orgs
+                    
+                if parsed_countries := '|'.join([a['href'].replace('https://bionomia.net/country/', '') for a in div.findAll('a', href=self.re_country)]):
+                    countries = parsed_countries
+                    
         return pd.Series({
                 'orgs': orgs,
                 'countries': countries
@@ -159,7 +164,7 @@ class BionomiaInsitutionsTask(BaseTask):
         return BionomiaAggregateTask()
         
     def run(self):
-        df = pd.read_parquet(self.input().path)
+        df = pd.read_parquet(self.input().path, dtype_backend='numpy_nullable')
         df = df.replace('nan', None)
         bionomia_ids = set(itertools.chain.from_iterable([x.split('|') for x in df[df.orgs.notna()].orgs if x and not x.startswith('Q')]))
         organisations = []
@@ -185,7 +190,7 @@ class BionomiaInsitutionsTask(BaseTask):
                  
     
         df = pd.DataFrame(organisations)                
-        df.astype(str).to_parquet(self.output().path, index=False) 
+        df.to_parquet(self.output().path, index=False) 
                 
     def output(self):        
         return luigi.LocalTarget(INTERMEDIATE_DIR / 'bionomia' / 'institutions.parquet')                        
@@ -196,9 +201,7 @@ class BionomiaWikiDataInsitutionsTask(BaseTask):
         return BionomiaAggregateTask()
         
     def run(self):
-        df = pd.read_parquet(self.input().path)
-        # FIXME: Remove this:
-        df = df.replace('nan', None)
+        df = pd.read_parquet(self.input().path, dtype_backend='numpy_nullable')
         qids = set(itertools.chain.from_iterable([x.split('|') for x in df[df.orgs.notna()].orgs if x and x.startswith('Q')]))
         institutions = []
         with tqdm(total=len(qids)) as pbar:            
@@ -207,7 +210,7 @@ class BionomiaWikiDataInsitutionsTask(BaseTask):
                 pbar.update(1)
 
         df = pd.DataFrame(institutions)                
-        df.replace(np.nan, None).astype(str).to_parquet(self.output().path, index=False) 
+        df.to_parquet(self.output().path, index=False) 
                 
     def output(self):        
         return luigi.LocalTarget(INTERMEDIATE_DIR / 'bionomia' / 'wikidata-institutions.parquet') 
@@ -227,23 +230,47 @@ class BionomiaCollectorsTask(BaseTask):
     def run(self):
         
         collectors = pd.read_parquet(BionomiaAggregateTask().output().path)
-        wikidata_inst = pd.read_parquet(BionomiaWikiDataInsitutionsTask().output().path)
-        inst = pd.read_parquet(BionomiaInsitutionsTask().output().path)
+        wd_inst = pd.read_parquet(BionomiaWikiDataInsitutionsTask().output().path)
+        bio_inst = pd.read_parquet(BionomiaInsitutionsTask().output().path)
         
-        wd = wd.rename(columns={'qid': 'id'})
-        institutions = pd.concat([wd[['id', 'country']], inst[['id', 'country']]])
+        wd_inst = wd_inst.rename(columns={'qid': 'id'})
+        institutions = pd.concat([wd_inst[['id', 'country']], bio_inst[['id', 'country']]])
         institutions = institutions.set_index('id')
         
-        
-        pass
-        
+        def get_institution_country(row):
+            countries = set(row.countries.split('|')) if row.countries else set()
+
+            orgs = row.orgs.split('|')
+            if orgs:    
+                result = institutions[(institutions.index.isin(orgs)) & (institutions.country.notna())]
+                countries.update(result.country.values.tolist())
+            
+            if countries:
+                return '|'.join(countries)
+
+        collectors['countries'] = collectors[(~collectors.orgs.isnull())].apply(get_institution_country, axis=1)
+        collectors.to_parquet(self.output().path, index=False) 
+
+    def output(self):        
+        return luigi.LocalTarget(INTERMEDIATE_DIR / 'bionomia' / 'collectors.parquet') 
+
+class BionomiaClaimsTask(luigi.ExternalTask):  
+    
+    url = 'https://bionomia.net/data/bionomia-public-claims.csv.gz'
+    
+    def run(self):
+        wget.download(self.url, self.output().path)
+
+    def output(self): 
+        return luigi.LocalTarget(INTERMEDIATE_DIR / 'bionomia' / Path(self.url).name)
+
 class BionomiaAttributionsTask(BaseTask):  
     """
-    We do not use 
+    
     """ 
     def requires(self):
         return [
-            BionomiaAggregateTask(),
+            BionomiaClaimsTask(),
             # GBIFOccurrencesTask()
         ]    
     
@@ -259,4 +286,4 @@ class BionomiaAttributionsTask(BaseTask):
             
 if __name__ == "__main__":
     # luigi.build([ProcessSpecimenTask(image_id='011244568', force=True)], local_scheduler=True)
-    luigi.build([BionomiaAggregateTask(force=True)], local_scheduler=True)     
+    luigi.build([BionomiaCollectorsTask(force=True)], local_scheduler=True)     
