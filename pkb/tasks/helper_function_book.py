@@ -123,9 +123,22 @@ def get_author_collector_notes(df, col):
             authorNoteCol.append(get_author_notes(string))
             collectorNoteCol.append(get_collector_notes(string))
         else:
-            authorNoteCol.append(np.nan)
-            collectorNoteCol.append(np.nan)
+            authorNoteCol.append([]) # use empty to reduce runtime exception while condition checking
+            collectorNoteCol.append([])
     return authorNoteCol, collectorNoteCol
+
+def extract_herbariums(df, col):
+    newCol = []
+    for index, rowValue in df[col].iteritems():
+        if rowValue:
+            temp = []
+            # for i in rowValue: temp = get_herbarium_codes(i)
+            for i in rowValue: 
+                temp += get_herbarium_codes(i)
+            newCol.append(temp)
+        else:
+            newCol.append([])
+    return newCol
 
 
 '''
@@ -198,4 +211,34 @@ def combine_geography(df):
             newCol[index] = set(clean_text(rowValue).replace('\xa0 ','').split(','))
         else:
             newCol[index] = np.nan
+    return newCol
+
+
+# Replace empty list as np.nan
+def remove_empty(df, col):
+    newCol = []
+    for index, rowValue in df[col].iteritems():
+        if not rowValue:
+            newCol.append(np.nan)
+        else:
+            newCol.append(rowValue)
+    return newCol
+
+
+'''
+For Combining Wikidata and Harvard Index data
+Example:
+wiki_data['harvardIndex'] = return_numeric(wiki_data, 'harvardIndex')
+
+# But it's the same as the below inbuilt function
+wiki_data['harvardIndex'] = pd.to_numeric(wiki_data['harvardIndex'],errors='coerce') ## wrap wiki id to int64
+'''
+# Helper function to extract numerical numbers from a data column
+def return_numeric(df, col):
+    newCol = []
+    for index, rowValue in df[col].iteritems():
+        if pd.notnull(rowValue):
+            newCol.append(re.sub("[^0-9|.]", "", str(rowValue)))
+        else:
+            newCol.append(rowValue)
     return newCol
