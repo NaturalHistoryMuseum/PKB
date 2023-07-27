@@ -242,3 +242,160 @@ def return_numeric(df, col):
         else:
             newCol.append(rowValue)
     return newCol
+
+'''
+import unicodedata as ud
+
+latin_letters= {}
+
+def is_latin(uchr):
+    try: return latin_letters[uchr]
+    except KeyError:
+         return latin_letters.setdefault(uchr, 'LATIN' in ud.name(uchr))
+
+def only_roman_chars(unistr):
+    return all(is_latin(uchr)
+           for uchr in unistr
+           if uchr.isalpha()) 
+           
+Example:
+clean_encode_characters_col(df,'Name')
+clean_encode_characters(df)
+'''
+#Clean the latin encoded characters - This is so silly...but it works
+def clean_encode_characters(df): # clean all the dataframe
+    df = df.replace(to_replace ="Ã¶", value ="ö", regex=True) 
+    df = df.replace(to_replace ="Ã©", value ="é", regex=True)
+    df = df.replace(to_replace ="Ã¨", value ="è", regex=True)
+    df = df.replace(to_replace ="Ã¼", value ="ü", regex=True)
+    
+def clean_encode_characters_col(df,col): # clean specific column of the dataframe
+    df[col] = df[col].replace(to_replace ="Ã¶", value ="ö", regex=True) 
+    df[col] = df[col].replace(to_replace ="Ã©", value ="é", regex=True)
+    df[col] = df[col].replace(to_replace ="Ã¨", value ="è", regex=True)
+    df[col] = df[col].replace(to_replace ="Ã¼", value ="ü", regex=True)
+
+## Helper function to check config in name list
+def remove_name_config(nameList):
+    i = 0
+    while i < len(nameList):
+        j = i + 1
+        while j < len(nameList):
+            if fuzz.token_set_ratio(nameList[i], nameList[j]) == 100:
+                del nameList[j]
+            else:
+                j += 1
+        i += 1
+    return nameList
+
+# function to get firstnames and lastnames from wiki
+def get_firstname_lastname_wiki(df):
+    colName = 'label'
+    df['firstnames_wiki'] = df[colName].str.split('\s+').str[0]
+    df['lastnames_wiki'] = df[colName].str.split('\s+').str[-1]
+
+# function to get firstnames and lastnames from harvard
+def get_firstname_lastname_harvard(df):
+    colName = 'Name'
+    df['firstnames_harvard'] = df[colName].str.split(', ').str[-1]
+    df['lastnames_harvard'] = df[colName].str.split(', ').str[0]
+    
+# function to get firstnames 
+def get_firstname(df):
+    firstNameList = []
+    temp = []
+    colNames = ['firstnames_wiki','firstnames_harvard']
+    firstNameList = df[colNames].apply(lambda row: ','.join(row.dropna().unique()), axis=1)
+    for index, rowValue in firstNameList.iteritems():
+        temp = rowValue.split(',')
+        if isinstance(temp, str):
+            firstNameList[index] = rowValue
+        else:
+            temp = remove_name_config(temp)
+            firstNameList[index] = temp[0]
+    return firstNameList
+
+# function to get lastnames
+def get_lastname(df):
+    lastNameList = []
+    temp = []
+    colNames = ['lastnames_wiki','lastnames_harvard'] # add the columns you wanna combine here
+    lastNameList = df[colNames].apply(lambda row: ','.join(row.dropna().unique()), axis=1)
+    for index, rowValue in lastNameList.iteritems():
+        temp = rowValue.split(',')
+        if isinstance(temp, str):
+            lastNameList[index] = rowValue
+        else:
+            temp = remove_name_config(temp)
+            lastNameList[index] = temp[0]
+    return lastNameList
+
+# function to return all possible author abbreviations
+def get_authorAbbrv(df):
+    newCol = []
+    temp = []
+    colNames = ['authorAbbrv','B\xa0&\xa0P\xa0Author\xa0Abbrev.'] # add the columns you wanna combine here
+    newCol = df[colNames].apply(lambda row: ','.join(row.dropna().unique()), axis=1)
+    for index, rowValue in newCol.iteritems():
+        temp = rowValue.split(',')
+        if isinstance(temp, str):
+            newCol[index] = rowValue
+        else:
+            temp = remove_name_config(temp)
+            newCol[index] = temp
+    return newCol
+
+# function to return the collector's fullname
+def get_fullName(df):
+    newCol = []
+    colNames_w = ['firstnames_wiki','lastnames_wiki']
+    colNames_h = ['firstnames_harvard','lastnames_harvard']
+    fullname_w = df[colNames_w].apply(lambda row: ' '.join(row.dropna().unique()), axis=1)
+    fullname_h = df[colNames_h].apply(lambda row: ' '.join(row.dropna().unique()), axis=1)
+    newCol = fullname_w
+    for index, rowValue in fullname_w.iteritems():
+        if len(rowValue) > len(fullname_h[index]):
+            newCol[index] = rowValue
+        else:
+            newCol[index] = fullname_h[index]
+    return newCol
+
+# Extract specialty areas of collectors - for Harvard Index data preprocessing
+def combine_name_list(df):
+    nameList = []
+    cols_name_to_combine = ['aliases','label','authorAbbrv','birthName',
+                            'Name','labelName','Full Name','Variant name','Author name'
+                            ,'B\xa0&\xa0P\xa0Author\xa0Abbrev.']
+    nameList = df[cols_name_to_combine].apply(lambda row: ','.join(row.dropna().unique()), axis=1)
+    return nameList
+
+def drop_dump_names(df):
+    cols_to_drop = ['aliases','label','authorAbbrv','birthName','Variant name',
+                    'Name','labelName','Full Name','Author name','B\xa0&\xa0P\xa0Author\xa0Abbrev.',
+                   'firstnames_wiki','lastnames_wiki','firstnames_harvard','lastnames_harvard']
+
+    df.drop(cols_to_drop, axis=1, inplace=True)
+
+# collector name cleaning process
+def name_cleaning(df):
+    
+    result['acceptedNames'] = combine_name_list(result) # return all accepted names of a collector
+    result['acceptedNames'] = remove_spec_in_col(result,'acceptedNames')
+    
+    get_firstname_lastname_wiki(df)
+    get_firstname_lastname_harvard(df)
+    df['firstname'] = get_firstname(df)
+    df['lastname'] = get_lastname(df)
+    df['firstname'] = remove_spec_in_col(df,'firstname') # return firstname of a collector
+    df['lastname'] = remove_spec_in_col(df,'lastname') # return lastname of a collector
+    
+    df['authorAbbrv'] = get_authorAbbrv(df) # return all possible author abbreviations of a collector
+    
+    df['fullName'] = get_fullName(df)
+    df['fullName'] = remove_spec_in_col(df,'fullName') # return fullname of a collector
+    
+    clean_encode_characters_col(df,'firstname')
+    clean_encode_characters_col(df,'lastname')
+    clean_encode_characters_col(df,'fullName')
+    
+    drop_dump_names(df)
