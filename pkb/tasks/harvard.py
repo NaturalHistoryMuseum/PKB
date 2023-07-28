@@ -10,6 +10,7 @@ import yaml
 import time
 import pandas as pd
 import re
+import unicodedata
 from tqdm import tqdm
 
 
@@ -64,7 +65,10 @@ class HarvardIndexDetailTask(BaseTask):
         with self.output().open('w') as outf:  
             
             start_time = time.time()  
-            collector_ids.reverse()
+            # collector_ids.reverse()
+            
+            # collector_ids = [42819]
+            
             for collector_id in tqdm(collector_ids):              
                 collector = self._parse_detail_page(collector_id)
                 if botanist_id := collector.get('ASA Botanist ID'):                
@@ -75,7 +79,7 @@ class HarvardIndexDetailTask(BaseTask):
                     else:
                         collector['asa_category'] = asa_cat
                 
-                yaml.dump(collector, outf, default_flow_style=False, explicit_start=True)
+                yaml.dump(collector, outf, default_flow_style=False, explicit_start=True, allow_unicode=True)
                 
             logger.info("Total Running time = {:.3f} seconds".format(time.time() - start_time))
 
@@ -88,8 +92,8 @@ class HarvardIndexDetailTask(BaseTask):
         r = requests.get(self.url, params)
         
         strainer = SoupStrainer('div', attrs={'id': 'main_text_wide'})        
-        soup = BeautifulSoup(r.text, 'lxml', parse_only=strainer)
-        
+        soup = BeautifulSoup(r.content, 'lxml', parse_only=strainer)
+
         try:
             table = soup.find('table')
             trs = table.find_all('tr')
@@ -97,13 +101,15 @@ class HarvardIndexDetailTask(BaseTask):
             logger.error('Could not parse harvard detail page for %s', collector_id)
             return
         
-        collector = {}
+        collector = {
+            'id': collector_id
+        }
         
         for tr in trs:
 
-            label = tr.find('td', {"class":"cap"}).get_text(strip=True)
-            val = tr.find('td', {"class":"val"}).get_text(strip=True)            
-            if label == 'Variant name': label = 'Name'            
+            label = self.normalise(tr.find('td', {"class":"cap"}).get_text(strip=True))
+            val = self.normalise(tr.find('td', {"class":"val"}).get_text(strip=True))            
+            if label == 'Variant name': label = 'Name'   
             
             try:            
                 collector[label].append(val)
@@ -116,8 +122,13 @@ class HarvardIndexDetailTask(BaseTask):
 
         return collector
     
+    @staticmethod
+    def normalise(text):
+        return unicodedata.normalize("NFKD", text)
+        
+    
     def output(self):
-        return luigi.LocalTarget(INTERMEDIATE_DIR /  'harvard-index' / 'detail.yaml')     
+        return luigi.LocalTarget(INTERMEDIATE_DIR /  'harvard-index' / 'detail-4.yaml')     
             
             
 class HarvardIndexCollectorsTask(BaseTask):
@@ -129,11 +140,15 @@ class HarvardIndexCollectorsTask(BaseTask):
         ]
         
     def run(self):
+        logger.info('Loading harvard index botanists')
+        
         with HarvardIndexDetailTask().output().open('r') as f:             
             harvard_index = yaml.load_all(f, yaml.FullLoader)
             df = pd.json_normalize(harvard_index)
-            
-        df = df[df['asa_category'] == 'botanist']
+
+        # Ensure these are individual botanists (list includes insitutions and groups)
+        df = df[(df['asa_category'] == 'botanist') & (df['Agent type'] != 'Team/Group')]
+
         logger.info('%s botanists identifed in Harvard Index', len(df))
         
         # # Extract herbaria codes from remarks 
@@ -142,8 +157,12 @@ class HarvardIndexCollectorsTask(BaseTask):
         
         # # TODO - Merge istitution ids
         # print(df.columns)
+        
+        # Contains lists so lets use a CSV
+        df.to_csv(self.output().path, index=False)
 
-
+    def output(self):
+        return luigi.LocalTarget(INTERMEDIATE_DIR /  'harvard-index' / 'collectors.csv') 
         
 if __name__ == "__main__":
-    luigi.build([HarvardIndexDetailTask(force=True)], local_scheduler=True)        
+    luigi.build([HarvardIndexCollectorsTask(force=True)], local_scheduler=True)        

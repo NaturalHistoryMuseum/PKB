@@ -302,7 +302,9 @@ class BionomiaAttributionsTask(BaseTask):
     def output(self): 
         return luigi.LocalTarget(INTERMEDIATE_DIR / 'bionomia' / 'attributions.csv')  
                 
+                
+                
             
 if __name__ == "__main__":
     # luigi.build([ProcessSpecimenTask(image_id='011244568', force=True)], local_scheduler=True)
-    luigi.build([BionomiaAttributionsTask(force=True)], local_scheduler=True)     
+    luigi.build([BionomiaCollectorsTask(force=True)], local_scheduler=True)     
