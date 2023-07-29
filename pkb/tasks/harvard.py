@@ -3,14 +3,18 @@ import requests
 import requests_cache
 import lxml
 from bs4 import BeautifulSoup, SoupStrainer
-from pkb.config import INTERMEDIATE_DIR, CACHE_DIR, logger
+from pkb.config import INTERMEDIATE_DIR, CACHE_DIR, logger, INPUT_DIR
 from pkb.tasks.base import BaseTask
 from pkb.tasks.grscicol import GRSciCollAggregatedTask
+from pkb.utils import is_alpha
+from dateutil.parser import parse
+from nameparser import HumanName
 import yaml
 import time
 import pandas as pd
 import re
 import unicodedata
+import numpy as np
 from tqdm import tqdm
 
 
@@ -133,6 +137,9 @@ class HarvardIndexDetailTask(BaseTask):
             
 class HarvardIndexCollectorsTask(BaseTask):
     
+    # Match space/start A or A-Z space/end/comma
+    herb_code_regex = re.compile('(?:\s|^|\[)([A-Z]+|[A-Z]+\-[A-Z]+)(?:\s+|$|,|\])')
+    
     def requires(self):
         return [
             HarvardIndexDetailTask(),
@@ -145,24 +152,79 @@ class HarvardIndexCollectorsTask(BaseTask):
         with HarvardIndexDetailTask().output().open('r') as f:             
             harvard_index = yaml.load_all(f, yaml.FullLoader)
             df = pd.json_normalize(harvard_index)
+            
+        grscicol = pd.read_parquet(GRSciCollAggregatedTask().output().path)
+            
+        logger.info('%s records in Harvard Index', len(df))
+            
+        # FIXME: Should be a task
+        countries = pd.read_csv(INPUT_DIR / 'countries.csv')
+        alt_countries = pd.read_csv(INPUT_DIR / 'alternateCountryNames.csv')  
+        
+        # Create a dict keyed by name - easy lookup later for ISO  
+        country_dict = dict(alt_countries[alt_countries.isolanguage.isin(['en', 'en-GB'])][['altName', 'ISO']].to_records(index=False))
+        country_dict.update(dict(countries[['countryName', 'ISO']].to_records(index=False)))        
+        country_names = [n for n in country_dict.keys() if is_alpha(n)]
+        # Sorted so longer matches are found first
+        sorted_country_names = sorted(country_names, key=len, reverse=True)
+        pattern = re.compile("|".join(sorted_country_names))
+        
+        def string_to_country_code(combined_geog):
+            matches = set(pattern.findall(combined_geog))
+            iso = [country_dict.get(m) for m in matches]
+            return iso        
 
         # Ensure these are individual botanists (list includes insitutions and groups)
         df = df[(df['asa_category'] == 'botanist') & (df['Agent type'] != 'Team/Group')]
-
+        
         logger.info('%s botanists identifed in Harvard Index', len(df))
         
-        # # Extract herbaria codes from remarks 
-        # df['herbaria_code'] = df[df['Remarks'].notna()]['Remarks'].apply(lambda x: re.findall(r'\b[A-Z\-]+\b', x) or None)            
-        # logger.info('Identified herbaria codes for %s/%s botanists', len(df[df['herbaria_code'].notna()].index), len(df))
+        df[['birthYear', 'birthYearIsApprox']] = df[df['Date of birth'].notna()].apply(self.get_year, axis=1, result_type='expand', args = ('Date of birth',))
+        df[['deathYear', 'deathYearIsApprox']] = df[df['Date of death'].notna()].apply(self.get_year, axis=1, result_type='expand', args = ('Date of death',))
+
+        geography_cols = ['Geography Author', 'Geography Collector', 'Geography Determiner', 'Geography']
+        df['geographyCombined'] = df[geography_cols].apply(lambda x: x.str.cat(sep='|'), axis=1)        
+        df['geographyISO'] = df[df['geographyCombined'] != '']['geographyCombined'].apply(string_to_country_code)
         
-        # # TODO - Merge istitution ids
-        # print(df.columns)
+        df[['title', 'firstName', 'middleName', 'lastName']] = df.apply(self.parse_name, axis=1, result_type='expand')
+
+        # Extract herbaria codes from remarks - needs tidying up / mering with Q's code
+        df['herbariaCode'] = df[df['Remarks'].notna()]['Remarks'].apply(self.extract_herbarium_codes)    
+        
+        # Add insitution UUID for herbaria codes
+        herb_code = pd.concat([
+            grscicol[grscicol.indexHerbCode.notna()].explode('indexHerbCode').indexHerbCode,
+            grscicol[grscicol.collectionsindexHerbCode.notna()].explode('collectionsindexHerbCode').collectionsindexHerbCode
+        ]).drop_duplicates()
+        
+        df['institutionUUID'] = df[df.herbariaCode.notna()].herbariaCode.apply(lambda codes: herb_code[herb_code.isin(codes)].index.to_list())
+        logger.info('%s botanists matched to insitution ID', len(df[df['institutionUUID'].notna()]))
         
         # Contains lists so lets use a CSV
         df.to_csv(self.output().path, index=False)
 
     def output(self):
-        return luigi.LocalTarget(INTERMEDIATE_DIR /  'harvard-index' / 'collectors.csv') 
+        return luigi.LocalTarget(INTERMEDIATE_DIR /  'harvard-index' / 'collectorss.csv') 
+    
+    @staticmethod
+    def get_year(row, field_name):
+        s = row[field_name]
+        year = parse(s, fuzzy=True).year
+        # Match ? ~ ca - denotes approx
+        is_approx = bool(re.search(r'\?|~|ca', s))
+        return year, is_approx  
+    
+    @staticmethod    
+    def parse_name(row):
+        full_name = row['Name'] if pd.isnull(row['Full Name']) else row['Full Name']
+        # If this is a list, we use the longest name  
+        if isinstance(full_name, list):
+            full_name = sorted(full_name, key=len)[-1]
+        name = HumanName(full_name)
+        return name.title, name.first, name.middle, name.last 
+    
+    def extract_herbarium_codes(self, remarks):
+        return set(self.herb_code_regex.findall(remarks)) or np.nan
         
 if __name__ == "__main__":
     luigi.build([HarvardIndexCollectorsTask(force=True)], local_scheduler=True)        
