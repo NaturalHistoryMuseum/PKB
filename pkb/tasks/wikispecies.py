@@ -40,8 +40,8 @@ class WikiSpeciesInstitutionsTask(BaseTask):
                 if not 'acronym' in trs[0].text.lower():
                     continue
                 for tr in trs[1:]:
-                    values = 
-                    insitution = dict(zip(columns, [td.text for td in tr.findAll('td')]))  
+                    values = [td.text for td in tr.findAll('td')]
+                    insitution = dict(zip(columns, values))  
                     insitutions.append(insitution)
                             
         dict_to_parquet(insitutions, self.output().path)                

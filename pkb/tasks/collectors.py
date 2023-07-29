@@ -19,7 +19,7 @@ from pkb.tasks.bionomia import BionomiaCollectorsTask
 tqdm.pandas()
 
          
-class InstitutionsTask(BaseTask):
+class CollectorsTask(BaseTask):
     """
     Look up index herbarium code
     """
