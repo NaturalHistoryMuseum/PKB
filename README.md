@@ -3,6 +3,8 @@ Planetary Knowledge Base
 
 Scripts for creating the data sources
 
+## Collector data source files
+
 Wikipedia Collector: collector_source_files/wikidata-collectors-230615.csv
 
 Bionomia Collector: collector_source_files/collectors (1).parquet
