@@ -63,15 +63,15 @@ class WikiDataCollectorsTask(BaseTask):
         # Natural history collection or herbarium
         query = """
             SELECT DISTINCT ?item WHERE {
-            {OPTIONAL { ?item wdt:P428 ?authorAbbrv . }} 
+            {OPTIONAL { ?item wdt:P428 ?authorAbbrv . }} # Botanist author abbreviation
                 UNION 
             {OPTIONAL {?item wdt:P6264 ?harvardIndex . }} 
                 UNION 
             {OPTIONAL {?item wdt:P6944 ?biomomia . }} 
                 UNION 
-            {OPTIONAL {?item wdt:P106 wd:Q2374149 . }}
+            {OPTIONAL {?item wdt:P106 wd:Q2374149 . }} # Botanist
                 UNION
-            {OPTIONAL {?item wdt:P106 wd:Q2083925 . }}
+            {OPTIONAL {?item wdt:P106 wd:Q2083925 . }} # Botanical collector
             } ORDER BY ?item
         """        
         query_results = WikiDataQuery(query)

@@ -7,6 +7,15 @@ import requests_cache
 
 DEBUG = os.getenv('DEBUG') or 1
 
+###### NEO4J #######
+
+class NEO4J(Enum):
+    URI = "neo4j://localhost:7687"
+    USER = "neo4j"
+    PASSWORD = 'asdfasdf'
+    DATABASE = 'neo4j'
+
+
 ###### Paths #######
 
 ROOT_DIR = Path(__file__).parent.parent.resolve()

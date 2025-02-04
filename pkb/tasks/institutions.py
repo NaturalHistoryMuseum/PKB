@@ -15,7 +15,6 @@ from pkb.tasks.base import BaseTask
 from pkb.tasks.grscicol import GRSciCollAggregatedTask
 from pkb.tasks.wikidata import WikiDataInstitutionsTask
 from pkb.tasks.bionomia import BionomiaInsitutionsTask, BionomiaWikiDataInsitutionsTask     
-# from pkb.utils import to_parquet
 
 tqdm.pandas()
 
@@ -44,7 +43,7 @@ class InstitutionsTask(BaseTask):
         
         df = self.df.join(wikidata)
         df.rename(columns={'qid': 'wikidata'}, inplace=True)   
-        df.to_parquet(self.output().path)
+        df.to_csv(self.output().path)
 
     def get_grscicol_uuid(self, row):
         
@@ -102,7 +101,7 @@ class InstitutionsTask(BaseTask):
             return result.index.tolist()        
         
     def output(self): 
-        return luigi.LocalTarget(OUTPUT_DIR / 'institutions.parquet')                  
+        return luigi.LocalTarget(OUTPUT_DIR / 'institutions.csv')                  
 
     
     

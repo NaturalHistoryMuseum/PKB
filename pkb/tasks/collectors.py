@@ -18,7 +18,20 @@ from pkb.tasks.bionomia import BionomiaCollectorsTask
 
 tqdm.pandas()
 
-         
+class NormaliseCollectorsTask(BaseTask):
+    pass
+
+class NormaliseHarvardCollectorsTask(BaseTask):
+    def requires(self):
+        return HarvardIndexCollectorsTask()
+    
+    def run(self):
+        df = pd.read_csv(self.input().path)    
+        print(df.shape)    
+
+    def output(self): 
+        return luigi.LocalTarget(INTERMEDIATE_DIR / 'norm-harvard.csv') 
+
 class CollectorsTask(BaseTask):
     """
     Look up index herbarium code
@@ -42,4 +55,4 @@ class CollectorsTask(BaseTask):
     
 if __name__ == "__main__":
     # luigi.build([ProcessSpecimenTask(image_id='011244568', force=True)], local_scheduler=True)
-    luigi.build([InstitutionsTask(force=True)], local_scheduler=True)
+    luigi.build([NormaliseHarvardCollectorsTask(force=True)], local_scheduler=True)

@@ -204,7 +204,7 @@ class HarvardIndexCollectorsTask(BaseTask):
         df.to_csv(self.output().path, index=False)
 
     def output(self):
-        return luigi.LocalTarget(INTERMEDIATE_DIR /  'harvard-index' / 'collectorss.csv') 
+        return luigi.LocalTarget(INTERMEDIATE_DIR /  'harvard-index' / 'collectors.csv') 
     
     @staticmethod
     def get_year(row, field_name):
