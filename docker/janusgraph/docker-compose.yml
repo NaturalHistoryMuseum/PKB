@@ -1,0 +1,14 @@
+services:
+  janusgraph:
+    image: janusgraph/janusgraph:latest
+    container_name: pkb-janusgraph
+    restart: unless-stopped
+
+    ports:
+      - "8182:8182"
+
+    volumes:
+      - janusgraph-data:/var/lib/janusgraph
+
+volumes:
+  janusgraph-data:
