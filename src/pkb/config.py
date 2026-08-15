@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     @property
     def intermediate_dir(self) -> Path:
         return self.data_dir / "intermediate"
+    
+    @property
+    def assets_dir(self) -> Path:
+        return self.data_dir / "assets"    
 
     @property
     def output_dir(self) -> Path:

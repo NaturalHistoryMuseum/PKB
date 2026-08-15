@@ -20,47 +20,22 @@ from tqdm import tqdm
 
 requests_cache.install_cache(CACHE_DIR / 'harvard')
 
+import luigi
 
-class HarvardIndexSearchTask(BaseTask):
-    
-    url = 'https://kiki.huh.harvard.edu/databases/botanist_search.php'
-    
-    def _search(self, params):
-        default_params = {'start': 1, 'name': None, 'id': None, 'remarks': None, 'specilaity': None, 'country': None}        
-        params.update(default_params)
-        r = requests.get(self.url, params=params)          
-        logger.info('Using cached search: %s', r.from_cache)         
-        soup = BeautifulSoup(r.text, 'lxml')
-        inputs = soup.find_all('input', {'name': 'id[]'})    
-        for i in inputs:
-            yield i['value']
-            
-    def _search_individuals(self):            
-        return self._search({'individual': 'on'})
 
-    def _search_collectors(self):            
-        return self._search({'is_collector': 'on'})
-            
-    def run(self):
-        logger.info(f'Parsing Harvard Index of individuals')         
-        individuals = set(self._search_individuals()) 
-        logger.info(f'%s individuals retrieved from Harvard Index', len(individuals)) 
-        logger.info(f'Parsing Harvard Index of collectors')         
-        collectors = set(self._search_collectors()) 
-        logger.info(f'%s collectors retrieved from Harvard Index', len(collectors))
-        collector_ids = individuals | collectors
-        with self.output().open('w') as f:                  
-            f.write(yaml.dump(list(collector_ids),  default_flow_style=False))         
-        
+class HarvardAgentsFile(luigi.ExternalTask):
+
     def output(self):
-        return luigi.LocalTarget(INTERMEDIATE_DIR / 'harvard-index' / f'search.yaml')           
-        
+        return luigi.LocalTarget(
+            "assets/harvard/huh-agents.tab.txt"
+        )
+     
 class HarvardIndexDetailTask(BaseTask):
     
     url = 'https://kiki.huh.harvard.edu/databases/botanist_search.php'
     
     def requires(self):
-        return HarvardIndexSearchTask()
+        return HarvardAgentsFile()
     
     def run(self):
         with self.input().open('r') as f: 
