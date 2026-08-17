@@ -1,26 +1,59 @@
 from __future__ import annotations
 
-import luigi
-import pandas as pd
-from tqdm import tqdm
+import json
 
-from pkb.config import logger, settings
-from pkb.tasks.base import BaseTask
-from pkb.wikidata.client import fetch_entities, run_sparql_query
-from pkb.wikidata.parsers import (
-    label,
-    parse_collector_entity,
-    property_value,
-    property_values,
+import luigi
+
+from pkb.config import settings
+from pkb.storage import fetch_source_object, get_s3_client, read_dataset_version
+from pkb.tasks.sources.wikidata import (
+    WikiDataEntityBatchSourceTask,
+    WikiDataEntitiesSourceTask,
+    WikiDataSPARQLSourceTask,
 )
+from pkb.wikidata.parsers import property_value, property_values
 
 
 WIKIDATA_PEOPLE_SOURCE_DIR = settings.intermediate_dir / "sources" / "wikidata" / "people"
 
 
-class WikiDataCollectorIDsSourceTask(BaseTask):
-    """Materialise Wikidata item IDs for people relevant to Phase 1."""
+def collect_related_qids_for_collectors(
+    entities: dict[str, dict],
+) -> set[str]:
+    related_qids = set()
 
+    for entity in entities.values():
+        if not entity or entity.get("missing"):
+            continue
+
+        related_qids.update(property_values(entity, "P27"))  # country of citizenship
+        related_qids.update(property_values(entity, "P108"))  # employer
+
+        if gender := property_value(entity, "P21"):
+            related_qids.add(gender)
+
+    return related_qids
+
+
+def read_entities_from_manifest(path: str) -> dict[str, dict]:
+    dataset_version = read_dataset_version(path)
+    s3 = get_s3_client()
+    entities = {}
+
+    for source_object in dataset_version.source_objects or []:
+        data = fetch_source_object(s3=s3, source_object=source_object)
+        payload = json.loads(data)
+        entities.update(payload.get("entities", {}))
+
+    return entities
+
+
+class WikiDataCollectorIDsSourceTask(WikiDataSPARQLSourceTask):
+    """Store raw SPARQL discovery results for Wikidata collectors."""
+
+    dataset = "wikidata_collector_ids"
+    output_path = WIKIDATA_PEOPLE_SOURCE_DIR / "collector_ids.dataset-version.json"
+    s3_key = "wikidata/people/collector-ids/source.json"
     query = """
         SELECT DISTINCT ?item WHERE {
           {
@@ -46,119 +79,65 @@ class WikiDataCollectorIDsSourceTask(BaseTask):
         ORDER BY ?item
     """
 
-    def output(self):
-        return luigi.LocalTarget(WIKIDATA_PEOPLE_SOURCE_DIR / "collector_ids.parquet")
 
-    def run(self):
-        rows = run_sparql_query(self.query)
+class WikiDataCollectorEntityBatchSourceTask(WikiDataEntityBatchSourceTask):
+    """Store one raw wbgetentities batch for Wikidata collectors."""
 
-        qids = sorted(
-            {
-                row["item"]["value"].rsplit("/", 1)[-1]
-                for row in rows
-            }
-        )
-
-        logger.info("Found %s Wikidata collector IDs", len(qids))
-        logger.info("First 10 Wikidata collector IDs: %s", qids[:10])
-
-        df = pd.DataFrame({"wikidataID": qids})
-        df.to_parquet(self.output().path, index=False)
-
-        logger.info("Wrote Wikidata collector IDs to %s", self.output().path)
+    dataset = "wikidata_collector_entities"
+    output_dir = WIKIDATA_PEOPLE_SOURCE_DIR / "collector-entity-batches"
+    s3_key_prefix = "wikidata/people/collector-entities"
+    entity_label = "collector entities"
+    ids_source_task_class = WikiDataCollectorIDsSourceTask
 
 
-class WikiDataCollectorsSourceTask(BaseTask):
-    """Materialise parsed Wikidata collector/person source records."""
+class WikiDataCollectorEntitiesSourceTask(WikiDataEntitiesSourceTask):
+    """Store raw wbgetentities batches for Wikidata collectors."""
+
+    dataset = "wikidata_collector_entities"
+    output_path = WIKIDATA_PEOPLE_SOURCE_DIR / "collector_entities.dataset-version.json"
+    s3_key_prefix = "wikidata/people/collector-entities"
+    entity_label = "collector entities"
+    batch_task_class = WikiDataCollectorEntityBatchSourceTask
 
     def requires(self):
         return WikiDataCollectorIDsSourceTask()
 
-    def output(self):
-        return luigi.LocalTarget(WIKIDATA_PEOPLE_SOURCE_DIR / "collectors.parquet")
 
-    def run(self):
-        logger.info("Starting WikiDataCollectorsSourceTask")
+class WikiDataRelatedCollectorEntityBatchSourceTask(WikiDataEntityBatchSourceTask):
+    """Store one raw wbgetentities batch for entities referenced by collectors."""
 
-        ids = pd.read_parquet(self.input().path)
-        qids = ids["wikidataID"].dropna().astype(str).drop_duplicates().tolist()
+    dataset = "wikidata_related_collector_entities"
+    output_dir = WIKIDATA_PEOPLE_SOURCE_DIR / "related-collector-entity-batches"
+    s3_key_prefix = "wikidata/people/related-collector-entities"
+    entity_label = "related collector entities"
+    ids_source_task_class = WikiDataCollectorIDsSourceTask
 
-        logger.info("Loaded %s Wikidata collector IDs", len(qids))
-        logger.info("First 10 Wikidata collector IDs: %s", qids[:10])
+    def requires(self):
+        return WikiDataCollectorEntitiesSourceTask()
 
-        entities = fetch_entities(
-            qids,
-            batch_size=50,
-            label="collector entities",
-        )
-
-        logger.info("Fetched %s Wikidata collector entities", len(entities))
-
-        related_qids = collect_related_qids_for_collectors(entities)
-
-        logger.info(
-            "Found %s related Wikidata IDs from collectors",
-            len(related_qids),
-        )
-        logger.info("First 10 related IDs: %s", sorted(related_qids)[:10])
-
-        related_entities = fetch_entities(
-            sorted(related_qids),
-            batch_size=50,
-            label="related collector entities",
-        )
-
-        logger.info("Fetched %s related Wikidata entities", len(related_entities))
-
-        labels_by_qid = {
-            qid: entity_label
-            for qid, entity in related_entities.items()
-            if (entity_label := label(entity))
-        }
-
-        logger.info("Built label lookup for %s related entities", len(labels_by_qid))
-
-        records = []
-
-        for qid in tqdm(qids, desc="Parsing Wikidata collectors"):
-            entity = entities.get(qid)
-
-            if not entity or entity.get("missing"):
-                continue
-
-            records.append(
-                parse_collector_entity(
-                    qid=qid,
-                    entity=entity,
-                    labels_by_qid=labels_by_qid,
-                )
-            )
-
-        logger.info("Parsed %s Wikidata collector source records", len(records))
-
-        df = pd.DataFrame(records)
-        df.to_parquet(self.output().path, index=False)
-
-        logger.info("Wrote Wikidata collector source records to %s", self.output().path)
+    def qids(self) -> list[str]:
+        collector_entities = read_entities_from_manifest(self.input().path)
+        return sorted(collect_related_qids_for_collectors(collector_entities))
 
 
-def collect_related_qids_for_collectors(
-    entities: dict[str, dict],
-) -> set[str]:
-    related_qids = set()
+class WikiDataRelatedCollectorEntitiesSourceTask(WikiDataEntitiesSourceTask):
+    """Store raw wbgetentities batches for entities referenced by collectors."""
 
-    for entity in entities.values():
-        if not entity or entity.get("missing"):
-            continue
+    dataset = "wikidata_related_collector_entities"
+    output_path = (
+        WIKIDATA_PEOPLE_SOURCE_DIR / "related_collector_entities.dataset-version.json"
+    )
+    s3_key_prefix = "wikidata/people/related-collector-entities"
+    entity_label = "related collector entities"
+    batch_task_class = WikiDataRelatedCollectorEntityBatchSourceTask
 
-        related_qids.update(property_values(entity, "P27"))  # country of citizenship
-        related_qids.update(property_values(entity, "P108"))  # employer
+    def requires(self):
+        return WikiDataCollectorEntitiesSourceTask()
 
-        if gender := property_value(entity, "P21"):
-            related_qids.add(gender)
-
-    return related_qids
+    def qids(self) -> list[str]:
+        collector_entities = read_entities_from_manifest(self.input().path)
+        return sorted(collect_related_qids_for_collectors(collector_entities))
 
 
 if __name__ == "__main__":
-    luigi.build([WikiDataCollectorsSourceTask()], local_scheduler=True)
+    luigi.build([WikiDataCollectorEntitiesSourceTask()], local_scheduler=True)

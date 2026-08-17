@@ -17,9 +17,9 @@ Source tasks may call external APIs, download files, or page through remote serv
 Examples:
 
 ```text
-pkb.tasks.sources.people.wikidata.WikiDataCollectorsSourceTask
-  -> data/intermediate/sources/wikidata/people/collectors.dataset-version.json
-  -> s3://pkb-source-data/wikidata/people/collectors/source.json
+pkb.tasks.sources.people.wikidata.WikiDataCollectorIDsSourceTask
+  -> data/intermediate/sources/wikidata/people/collector_ids.dataset-version.json
+  -> s3://pkb-source-data/wikidata/people/collector-ids/source.json
 
 pkb.tasks.sources.institutions.grscicol.GRSciCollInstitutionsTSVSourceTask
   -> data/intermediate/sources/grscicol/institutions.dataset-version.json

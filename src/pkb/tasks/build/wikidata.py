@@ -7,17 +7,9 @@ New code should import from the owning knowledge-domain package, for example
 from pkb.tasks.build.institutions.wikidata import (
     WikiDataInstitutionsTask,
 )
-from pkb.tasks.build.people.wikidata import (
-    WikiDataCollectorIDsTask,
-    WikiDataCollectorsTask,
-    WikiDataPeopleTask,
-    collect_related_qids_for_collectors,
-)
+from pkb.tasks.build.people.wikidata import WikiDataPeopleTask
 
 __all__ = [
-    "WikiDataCollectorIDsTask",
-    "WikiDataCollectorsTask",
     "WikiDataPeopleTask",
     "WikiDataInstitutionsTask",
-    "collect_related_qids_for_collectors",
 ]
