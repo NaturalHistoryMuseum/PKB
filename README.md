@@ -53,10 +53,16 @@ WikiDataSPARQLSourceTask
 
 WikiDataEntitiesSourceTask
   -> reads those QIDs
-  -> stores raw wbgetentities JSON batches
+  -> yields per-batch source tasks that store raw wbgetentities JSON batches
 
 domain build task
   -> parses the stored entity batches into PKB parquet
+```
+
+Run Wikidata entity source tasks with Luigi workers to fetch independent batches concurrently:
+
+```bash
+uv run luigi --module pkb.tasks.sources.institutions.wikidata WikiDataInstitutionEntitiesSourceTask --workers 4 --local-scheduler
 ```
 
 ### Load Tasks Write To Neo4j

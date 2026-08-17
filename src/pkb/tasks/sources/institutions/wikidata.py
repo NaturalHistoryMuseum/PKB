@@ -4,6 +4,7 @@ import luigi
 
 from pkb.config import settings
 from pkb.tasks.sources.wikidata import (
+    WikiDataEntityBatchSourceTask,
     WikiDataEntitiesSourceTask,
     WikiDataSPARQLSourceTask,
 )
@@ -46,6 +47,16 @@ class WikiDataInstitutionIDsSourceTask(WikiDataSPARQLSourceTask):
     """
 
 
+class WikiDataInstitutionEntityBatchSourceTask(WikiDataEntityBatchSourceTask):
+    """Store one raw wbgetentities batch for Wikidata institutions."""
+
+    dataset = "wikidata_institution_entities"
+    output_dir = WIKIDATA_INSTITUTION_SOURCE_DIR / "entity-batches"
+    s3_key_prefix = "wikidata/institutions/entities"
+    entity_label = "institution entities"
+    ids_source_task_class = WikiDataInstitutionIDsSourceTask
+
+
 class WikiDataInstitutionEntitiesSourceTask(WikiDataEntitiesSourceTask):
     """Store raw wbgetentities batches for Wikidata institutions."""
 
@@ -53,6 +64,7 @@ class WikiDataInstitutionEntitiesSourceTask(WikiDataEntitiesSourceTask):
     output_path = WIKIDATA_INSTITUTION_SOURCE_DIR / "entities.dataset-version.json"
     s3_key_prefix = "wikidata/institutions/entities"
     entity_label = "institution entities"
+    batch_task_class = WikiDataInstitutionEntityBatchSourceTask
 
     def requires(self):
         return WikiDataInstitutionIDsSourceTask()

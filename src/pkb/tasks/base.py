@@ -6,8 +6,8 @@ class BaseTask(luigi.Task):
     force = luigi.BoolParameter(default=False, significant=False)
     
     def __init__(self, *args, **kwargs):
-        self.ensure_output_dir()
         super().__init__(*args, **kwargs)
+        self.ensure_output_dir()
             
     def complete(self):
         if self.force:

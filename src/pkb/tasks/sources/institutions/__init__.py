@@ -5,6 +5,7 @@ from pkb.tasks.sources.institutions.grscicol import (
     GRSciCollInstitutionsTSVSourceTask,
 )
 from pkb.tasks.sources.institutions.wikidata import (
+    WikiDataInstitutionEntityBatchSourceTask,
     WikiDataInstitutionEntitiesSourceTask,
     WikiDataInstitutionIDsSourceTask,
 )
@@ -12,6 +13,7 @@ from pkb.tasks.sources.institutions.wikidata import (
 __all__ = [
     "GRSciCollCollectionsTSVSourceTask",
     "GRSciCollInstitutionsTSVSourceTask",
+    "WikiDataInstitutionEntityBatchSourceTask",
     "WikiDataInstitutionEntitiesSourceTask",
     "WikiDataInstitutionIDsSourceTask",
 ]

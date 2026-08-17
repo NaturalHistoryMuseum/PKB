@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import luigi
 import pandas as pd
 
 from pkb.storage import DatasetVersion, SourceObject, dataset_version_to_dict
 from pkb.tasks.sources.wikidata import (
+    WikiDataEntityBatchSourceTask,
     WikiDataEntitiesSourceTask,
     WikiDataSPARQLSourceTask,
     qids_from_sparql_response,
@@ -40,13 +42,22 @@ class ExampleSPARQLSourceTask(WikiDataSPARQLSourceTask):
     output_path = "ids.dataset-version.json"
 
 
+class ExampleEntityBatchSourceTask(WikiDataEntityBatchSourceTask):
+    dataset = "wikidata_example_entities"
+    s3_key_prefix = "wikidata/example/entities"
+    entity_label = "example entities"
+    batch_size = 2
+    output_dir = Path("entity-batches")
+    ids_source_task_class = ExampleSPARQLSourceTask
+
+
 class ExampleEntitiesSourceTask(WikiDataEntitiesSourceTask):
     dataset = "wikidata_example_entities"
     s3_key_prefix = "wikidata/example/entities"
     entity_label = "example entities"
     batch_size = 2
-    sleep_seconds = 0
     output_path = "entities.dataset-version.json"
+    batch_task_class = ExampleEntityBatchSourceTask
 
 
 def test_qids_from_sparql_response_returns_sorted_unique_ids():
@@ -106,16 +117,17 @@ def test_wikidata_sparql_source_task_stores_raw_response(monkeypatch, tmp_path):
     assert calls[1][1]["data"] == SPARQL_BYTES
 
 
-def test_wikidata_entities_source_task_stores_entity_batches(monkeypatch, tmp_path):
+def test_wikidata_entity_batch_source_task_stores_one_entity_batch(monkeypatch, tmp_path):
     import pkb.tasks.sources.wikidata as source_module
 
     calls = []
 
     monkeypatch.setattr(
-        ExampleEntitiesSourceTask,
+        ExampleEntityBatchSourceTask,
         "input",
         lambda self: luigi.LocalTarget(tmp_path / "ids.dataset-version.json"),
     )
+    monkeypatch.setattr(ExampleEntityBatchSourceTask, "output_dir", tmp_path)
     monkeypatch.setattr(
         source_module,
         "read_dataset_version",
@@ -161,13 +173,7 @@ def test_wikidata_entities_source_task_stores_entity_batches(monkeypatch, tmp_pa
 
     monkeypatch.setattr(source_module, "store_source_dataset", store_source_dataset)
 
-    monkeypatch.setattr(
-        ExampleEntitiesSourceTask,
-        "output",
-        lambda self: luigi.LocalTarget(tmp_path / "entities.dataset-version.json"),
-    )
-
-    task = ExampleEntitiesSourceTask()
+    task = ExampleEntityBatchSourceTask(batch_index=0)
     task.run()
 
     with open(task.output().path) as f:
@@ -175,9 +181,60 @@ def test_wikidata_entities_source_task_stores_entity_batches(monkeypatch, tmp_pa
 
     assert manifest["dataset"] == "wikidata_example_entities"
     assert [obj["s3_key"] for obj in manifest["source_objects"]] == [
-        "wikidata/example/entities/batch-00001.json"
+        "wikidata/example/entities/batch-00000.json"
     ]
-    assert calls[1][1]["key"] == "wikidata/example/entities/batch-00001.json"
+    assert calls[1][1]["key"] == "wikidata/example/entities/batch-00000.json"
+
+
+def test_wikidata_entities_source_task_yields_batches_and_combines_manifests(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(ExampleEntitiesSourceTask, "qids", lambda self: ["Q1", "Q2", "Q3"])
+    monkeypatch.setattr(ExampleEntityBatchSourceTask, "output_dir", tmp_path / "batches")
+    monkeypatch.setattr(
+        ExampleEntitiesSourceTask,
+        "output",
+        lambda self: luigi.LocalTarget(tmp_path / "entities.dataset-version.json"),
+    )
+
+    task = ExampleEntitiesSourceTask()
+    run = task.run()
+    batch_tasks = next(run)
+
+    assert [int(batch_task.batch_index) for batch_task in batch_tasks] == [0, 1]
+
+    for batch_task in batch_tasks:
+        source_object = SourceObject(
+            s3_bucket="pkb-source-data",
+            s3_key=f"wikidata/example/entities/batch-{batch_task.batch_index:05d}.json",
+            s3_version_id=f"version-{batch_task.batch_index}",
+            sha256="sha",
+            size=10,
+        )
+        batch_manifest = DatasetVersion(
+            dataset="wikidata_example_entities",
+            retrieved_at=datetime(2026, 8, 17, 12, 0, tzinfo=UTC),
+            source_url="https://www.wikidata.org/w/api.php",
+            source_objects=[source_object],
+        )
+        Path(batch_task.output().path).parent.mkdir(parents=True, exist_ok=True)
+        Path(batch_task.output().path).write_text(
+            json.dumps(dataset_version_to_dict(batch_manifest))
+        )
+
+    try:
+        next(run)
+    except StopIteration:
+        pass
+
+    with open(task.output().path) as f:
+        manifest = json.load(f)
+
+    assert [obj["s3_key"] for obj in manifest["source_objects"]] == [
+        "wikidata/example/entities/batch-00000.json",
+        "wikidata/example/entities/batch-00001.json",
+    ]
 
 
 def test_wikidata_institutions_build_parses_stored_entity_batches(monkeypatch, tmp_path):
