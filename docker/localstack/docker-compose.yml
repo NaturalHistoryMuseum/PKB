@@ -1,0 +1,14 @@
+services:
+  localstack:
+    image: localstack/localstack:4.6.0
+    container_name: pkb-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      AWS_DEFAULT_REGION: eu-west-2
+    volumes:
+      - localstack-data:/var/lib/localstack
+
+volumes:
+  localstack-data:

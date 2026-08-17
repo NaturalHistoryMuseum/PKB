@@ -1,6 +1,7 @@
 from pathlib import Path
 import logging
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,9 +19,29 @@ class Settings(BaseSettings):
     neo4j_password: str = "password"
     neo4j_database: str = "neo4j" 
 
+    aws_region: str = Field(
+        default="eu-west-2",
+        validation_alias=AliasChoices("PKB_AWS_REGION", "AWS_REGION"),
+    )
+    aws_access_key_id: str | None = Field(
+        default=None,
+        validation_alias="AWS_ACCESS_KEY_ID",
+    )
+    aws_secret_access_key: str | None = Field(
+        default=None,
+        validation_alias="AWS_SECRET_ACCESS_KEY",
+    )
+    s3_endpoint_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("PKB_S3_ENDPOINT_URL", "S3_ENDPOINT_URL"),
+    )
+    source_data_bucket: str = "pkb-source-data"
+
     root_dir: Path = Path(__file__).parent.parent.parent.resolve()
 
     model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
         env_prefix="PKB_",
         extra="ignore",
     )
@@ -61,6 +82,7 @@ settings = Settings()
 def initialise_directories() -> None:
     for path in [
         settings.input_dir,
+        settings.assets_dir,
         settings.intermediate_dir,
         settings.output_dir,
         settings.cache_dir,

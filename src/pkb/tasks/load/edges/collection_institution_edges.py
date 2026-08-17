@@ -3,7 +3,8 @@ import pandas as pd
 from pkb.config import logger, settings
 
 
-from pkb.tasks.build.grscicol import GRSciCollCollectionsAPITask
+from pkb.graph.schema import Labels, Relationships
+from pkb.tasks.build.institutions.grscicol import GRSciCollCollectionsTSVTask
 from pkb.tasks.load.edges.base import (
     LoadParquetEdgesToGraph,
 )
@@ -19,10 +20,10 @@ class LinkCollectionsToInstitutions(
     LoadParquetEdgesToGraph
 ):
 
-    source_label = "Collection"
-    target_label = "Institution"
+    source_label = Labels.COLLECTION
+    target_label = Labels.INSTITUTION
 
-    rel_type = "HELD_BY"
+    rel_type = Relationships.HELD_BY
 
     source_id_field = "key"              # field in collection parquet
     target_id_field = "institutionKey"   # field in collection parquet
@@ -32,7 +33,7 @@ class LinkCollectionsToInstitutions(
 
     def requires(self):
         return {
-            "source_data": GRSciCollCollectionsAPITask(),
+            "source_data": GRSciCollCollectionsTSVTask(),
             "collections": LoadInstitutionCollectionNodes(),
             "institutions": LoadInstitutionNodes(),
         }

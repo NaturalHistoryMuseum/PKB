@@ -2,6 +2,9 @@
 *.cache
 *.log
 *.venv
+.env
+.env.*
+!.env.example
 data/*
 __pycache__
 .DS_Store

@@ -16,10 +16,9 @@ def get_graph_writer() -> GraphWriter:
         )
 
     if backend == "janus":
-        from pkb.graph.janus_writer import JanusGraphWriter
-
-        return JanusGraphWriter(
-            gremlin_url=settings.graph_url,
+        raise ValueError(
+            "JanusGraph backend is not active in this refactor. "
+            "Set PKB_GRAPH_BACKEND=neo4j."
         )
 
     raise ValueError(f"Unsupported graph backend: {settings.graph_backend}")
