@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -11,16 +10,53 @@ from pkb.config import settings
 
 
 @dataclass(frozen=True)
+class SourceObject:
+    s3_bucket: str
+    s3_key: str
+    s3_version_id: str | None
+    sha256: str
+    size: int
+    content_type: str | None = None
+
+
+@dataclass(frozen=True)
 class DatasetVersion:
     dataset: str
     retrieved_at: datetime
     source_url: str
-    sha256: str
-    size: int
-    s3_bucket: str
-    s3_key: str
+    sha256: str | None = None
+    size: int | None = None
+    s3_bucket: str | None = None
+    s3_key: str | None = None
     s3_version_id: str | None = None
     upstream_version: str | None = None
+    source_objects: list[SourceObject] | None = None
+
+    def __post_init__(self):
+        if self.source_objects is None and self.s3_bucket and self.s3_key:
+            object.__setattr__(
+                self,
+                "source_objects",
+                [
+                    SourceObject(
+                        s3_bucket=self.s3_bucket,
+                        s3_key=self.s3_key,
+                        s3_version_id=self.s3_version_id,
+                        sha256=self.sha256 or "",
+                        size=self.size or 0,
+                    )
+                ],
+            )
+
+    @property
+    def source_object(self) -> SourceObject:
+        if not self.source_objects:
+            raise ValueError(f"DatasetVersion {self.dataset} has no source objects")
+        if len(self.source_objects) != 1:
+            raise ValueError(
+                f"DatasetVersion {self.dataset} has {len(self.source_objects)} source objects"
+            )
+        return self.source_objects[0]
 
 
 def get_s3_client():
@@ -113,21 +149,54 @@ def store_source_dataset(
         s3_key=s3_key,
         s3_version_id=response.get("VersionId"),
         upstream_version=upstream_version,
+        source_objects=[
+            SourceObject(
+                s3_bucket=s3_bucket,
+                s3_key=s3_key,
+                s3_version_id=response.get("VersionId"),
+                sha256=sha256_bytes(data),
+                size=len(data),
+            )
+        ],
     )
 
 
 def dataset_version_to_dict(dataset_version: DatasetVersion) -> dict[str, Any]:
+    source_objects = [
+        {
+            "s3_bucket": source_object.s3_bucket,
+            "s3_key": source_object.s3_key,
+            "s3_version_id": source_object.s3_version_id,
+            "sha256": source_object.sha256,
+            "size": source_object.size,
+            "content_type": source_object.content_type,
+        }
+        for source_object in dataset_version.source_objects or []
+    ]
     return {
-        **asdict(dataset_version),
+        "dataset": dataset_version.dataset,
         "retrieved_at": dataset_version.retrieved_at.isoformat(),
+        "source_url": dataset_version.source_url,
+        "sha256": dataset_version.sha256,
+        "size": dataset_version.size,
+        "s3_bucket": dataset_version.s3_bucket,
+        "s3_key": dataset_version.s3_key,
+        "s3_version_id": dataset_version.s3_version_id,
+        "upstream_version": dataset_version.upstream_version,
+        "source_objects": source_objects,
     }
 
 
 def dataset_version_from_dict(data: dict[str, Any]) -> DatasetVersion:
+    source_objects = data.get("source_objects")
+    if source_objects is not None:
+        source_objects = [SourceObject(**source_object) for source_object in source_objects]
+
     return DatasetVersion(
         **{
             **data,
             "retrieved_at": datetime.fromisoformat(data["retrieved_at"]),
+            "source_objects": source_objects,
         }
     )
 
@@ -138,12 +207,16 @@ def read_dataset_version(path: str) -> DatasetVersion:
 
 
 def fetch_source_dataset(*, s3, dataset_version: DatasetVersion) -> bytes:
+    return fetch_source_object(s3=s3, source_object=dataset_version.source_object)
+
+
+def fetch_source_object(*, s3, source_object: SourceObject) -> bytes:
     get_kwargs: dict[str, Any] = {
-        "Bucket": dataset_version.s3_bucket,
-        "Key": dataset_version.s3_key,
+        "Bucket": source_object.s3_bucket,
+        "Key": source_object.s3_key,
     }
-    if dataset_version.s3_version_id:
-        get_kwargs["VersionId"] = dataset_version.s3_version_id
+    if source_object.s3_version_id:
+        get_kwargs["VersionId"] = source_object.s3_version_id
 
     response = s3.get_object(**get_kwargs)
     return response["Body"].read()

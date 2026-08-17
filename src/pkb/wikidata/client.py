@@ -29,6 +29,15 @@ def chunks(items: list[str], size: int) -> Iterable[list[str]]:
 
 
 def run_sparql_query(query: str) -> list[dict[str, Any]]:
+    response = run_sparql_query_response(query)
+
+    rows = response.json()["results"]["bindings"]
+    logger.info("Wikidata SPARQL query returned %s rows", len(rows))
+
+    return rows
+
+
+def run_sparql_query_response(query: str):
     session = wikidata_session()
 
     logger.info("Running Wikidata SPARQL query")
@@ -43,11 +52,47 @@ def run_sparql_query(query: str) -> list[dict[str, Any]]:
         timeout=120,
     )
     response.raise_for_status()
+    return response
 
-    rows = response.json()["results"]["bindings"]
-    logger.info("Wikidata SPARQL query returned %s rows", len(rows))
 
-    return rows
+def fetch_entities_response(
+    qids: list[str],
+    *,
+    label: str = "Wikidata entities",
+):
+    session = wikidata_session()
+
+    response = session.get(
+        WIKIDATA_API_ENDPOINT,
+        params={
+            "action": "wbgetentities",
+            "ids": "|".join(qids),
+            "props": "labels|aliases|claims",
+            "languages": "en",
+            "format": "json",
+        },
+        headers={"User-Agent": USER_AGENT},
+        timeout=120,
+    )
+
+    if response.status_code == 429:
+        logger.warning("Wikidata returned 429 while fetching %s; retrying", label)
+        time.sleep(10)
+        response = session.get(
+            WIKIDATA_API_ENDPOINT,
+            params={
+                "action": "wbgetentities",
+                "ids": "|".join(qids),
+                "props": "labels|aliases|claims",
+                "languages": "en",
+                "format": "json",
+            },
+            headers={"User-Agent": USER_AGENT},
+            timeout=120,
+        )
+
+    response.raise_for_status()
+    return response
 
 
 def fetch_entities(
@@ -61,7 +106,6 @@ def fetch_entities(
     Fetch Wikidata entities in batches using wbgetentities.
     """
 
-    session = wikidata_session()
     entities: dict[str, dict[str, Any]] = {}
 
     qids = list(dict.fromkeys(qids))
@@ -83,41 +127,10 @@ def fetch_entities(
         ),
         start=1,
     ):
-        response = session.get(
-            WIKIDATA_API_ENDPOINT,
-            params={
-                "action": "wbgetentities",
-                "ids": "|".join(batch),
-                "props": "labels|aliases|claims",
-                "languages": "en",
-                "format": "json",
-            },
-            headers={"User-Agent": USER_AGENT},
-            timeout=120,
+        response = fetch_entities_response(
+            batch,
+            label=f"{label} batch {i}/{total_batches}",
         )
-
-        if response.status_code == 429:
-            logger.warning(
-                "Wikidata returned 429 on batch %s/%s; sleeping before retry",
-                i,
-                total_batches,
-            )
-            time.sleep(10)
-
-            response = session.get(
-                WIKIDATA_API_ENDPOINT,
-                params={
-                    "action": "wbgetentities",
-                    "ids": "|".join(batch),
-                    "props": "labels|aliases|claims",
-                    "languages": "en",
-                    "format": "json",
-                },
-                headers={"User-Agent": USER_AGENT},
-                timeout=120,
-            )
-
-        response.raise_for_status()
 
         payload = response.json()
         batch_entities = payload.get("entities", {})

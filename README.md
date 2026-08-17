@@ -45,6 +45,20 @@ pkb.tasks.build.institutions.institutions.InstitutionsTask
   -> data/intermediate/institutions/institutions.parquet
 ```
 
+Wikidata domains should reuse the shared source task pattern:
+
+```text
+WikiDataSPARQLSourceTask
+  -> stores raw SPARQL result JSON containing candidate QIDs
+
+WikiDataEntitiesSourceTask
+  -> reads those QIDs
+  -> stores raw wbgetentities JSON batches
+
+domain build task
+  -> parses the stored entity batches into PKB parquet
+```
+
 ### Load Tasks Write To Neo4j
 
 Tasks under `src/pkb/tasks/load/` import built parquet datasets into the graph. They should not fetch remote source data or perform heavy source normalisation.
