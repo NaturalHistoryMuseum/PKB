@@ -9,10 +9,7 @@ from tqdm import tqdm
 from pkb.config import logger, settings
 from pkb.storage import fetch_source_object, get_s3_client, read_dataset_version
 from pkb.tasks.base import BaseTask
-from pkb.tasks.sources.institutions.wikidata import (
-    WikiDataInstitutionEntitiesSourceTask,
-    WikiDataInstitutionIDsSourceTask,
-)
+from pkb.tasks.sources.institutions.wikidata import WikiDataInstitutionEntitiesSourceTask
 from pkb.wikidata.parsers import parse_institution_entity
 
 
@@ -61,11 +58,6 @@ class WikiDataInstitutionsTask(BaseTask):
             entities.update(payload.get("entities", {}))
 
         return entities
-
-
-class WikiDataInstitutionIDsTask(WikiDataInstitutionIDsSourceTask):
-    """Compatibility alias for the Wikidata institution source ID task."""
-
 
 if __name__ == "__main__":
     luigi.build([WikiDataInstitutionsTask()], local_scheduler=True)
