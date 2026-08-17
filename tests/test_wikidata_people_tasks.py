@@ -8,12 +8,12 @@ import pandas as pd
 
 from pkb.storage import DatasetVersion, SourceObject, dataset_version_to_dict
 from pkb.tasks.sources.people.wikidata import (
-    WikiDataRelatedCollectorEntitiesSourceTask,
-    collect_related_qids_for_collectors,
+    WikiDataCollectorPropertyEntitiesSourceTask,
+    collect_property_qids_for_collectors,
 )
 
 
-def test_collect_related_qids_for_collectors_finds_lookup_entities():
+def test_collect_property_qids_for_collectors_finds_property_entities():
     entities = {
         "Q1": {
             "claims": {
@@ -57,21 +57,21 @@ def test_collect_related_qids_for_collectors_finds_lookup_entities():
         }
     }
 
-    assert collect_related_qids_for_collectors(entities) == {
+    assert collect_property_qids_for_collectors(entities) == {
         "Q145",
         "Q309388",
         "Q6581097",
     }
 
 
-def test_related_collector_entities_source_derives_qids_from_collector_manifest(
+def test_collector_property_entities_source_derives_qids_from_collector_manifest(
     monkeypatch,
     tmp_path,
 ):
     import pkb.tasks.sources.people.wikidata as source_module
 
     monkeypatch.setattr(
-        WikiDataRelatedCollectorEntitiesSourceTask,
+        WikiDataCollectorPropertyEntitiesSourceTask,
         "input",
         lambda self: luigi.LocalTarget(tmp_path / "collector_entities.dataset-version.json"),
     )
@@ -98,7 +98,7 @@ def test_related_collector_entities_source_derives_qids_from_collector_manifest(
         },
     )
 
-    assert WikiDataRelatedCollectorEntitiesSourceTask().qids() == ["Q145"]
+    assert WikiDataCollectorPropertyEntitiesSourceTask().qids() == ["Q145"]
 
 
 def test_wikidata_people_build_parses_stored_collector_and_related_entities(
@@ -122,14 +122,14 @@ def test_wikidata_people_build_parses_stored_collector_and_related_entities(
             )
         ],
     )
-    related_manifest = DatasetVersion(
-        dataset="wikidata_related_collector_entities",
+    property_entities_manifest = DatasetVersion(
+        dataset="wikidata_collector_property_entities",
         retrieved_at=datetime(2026, 8, 17, 12, 0, tzinfo=UTC),
         source_url="https://www.wikidata.org/w/api.php",
         source_objects=[
             SourceObject(
                 s3_bucket="pkb-source-data",
-                s3_key="wikidata/people/related-collector-entities/batch-00000.json",
+                s3_key="wikidata/people/collector-property-entities/batch-00000.json",
                 s3_version_id="related-version",
                 sha256="sha",
                 size=0,
@@ -137,16 +137,20 @@ def test_wikidata_people_build_parses_stored_collector_and_related_entities(
         ],
     )
     collector_manifest_path = tmp_path / "collector_entities.dataset-version.json"
-    related_manifest_path = tmp_path / "related_collector_entities.dataset-version.json"
+    property_entities_manifest_path = (
+        tmp_path / "collector_property_entities.dataset-version.json"
+    )
     collector_manifest_path.write_text(json.dumps(dataset_version_to_dict(collector_manifest)))
-    related_manifest_path.write_text(json.dumps(dataset_version_to_dict(related_manifest)))
+    property_entities_manifest_path.write_text(
+        json.dumps(dataset_version_to_dict(property_entities_manifest))
+    )
 
     monkeypatch.setattr(
         WikiDataPeopleTask,
         "input",
         lambda self: {
             "collectors": luigi.LocalTarget(collector_manifest_path),
-            "related": luigi.LocalTarget(related_manifest_path),
+            "property_entities": luigi.LocalTarget(property_entities_manifest_path),
         },
     )
     monkeypatch.setattr(
@@ -178,7 +182,7 @@ def test_wikidata_people_build_parses_stored_collector_and_related_entities(
                     },
                 }
             }
-            if "related_collector_entities" not in str(path)
+            if "collector_property_entities" not in str(path)
             else {
                 "Q145": {
                     "labels": {"en": {"value": "United Kingdom"}},

@@ -8,7 +8,7 @@ from pkb.config import logger, settings
 from pkb.tasks.base import BaseTask
 from pkb.tasks.sources.people.wikidata import (
     WikiDataCollectorEntitiesSourceTask,
-    WikiDataRelatedCollectorEntitiesSourceTask,
+    WikiDataCollectorPropertyEntitiesSourceTask,
     read_entities_from_manifest,
 )
 from pkb.wikidata.parsers import label, parse_collector_entity
@@ -25,7 +25,7 @@ class WikiDataPeopleTask(BaseTask):
     def requires(self):
         return {
             "collectors": WikiDataCollectorEntitiesSourceTask(),
-            "related": WikiDataRelatedCollectorEntitiesSourceTask(),
+            "property_entities": WikiDataCollectorPropertyEntitiesSourceTask(),
         }
 
     def output(self):
@@ -35,15 +35,20 @@ class WikiDataPeopleTask(BaseTask):
         logger.info("Starting WikiDataPeopleTask")
 
         collector_entities = read_entities_from_manifest(self.input()["collectors"].path)
-        related_entities = read_entities_from_manifest(self.input()["related"].path)
+        property_entities = read_entities_from_manifest(
+            self.input()["property_entities"].path
+        )
         labels_by_qid = {
             qid: entity_label
-            for qid, entity in related_entities.items()
+            for qid, entity in property_entities.items()
             if (entity_label := label(entity))
         }
 
         logger.info("Loaded %s Wikidata collector entities", len(collector_entities))
-        logger.info("Built label lookup for %s related entities", len(labels_by_qid))
+        logger.info(
+            "Built label lookup for %s collector property entities",
+            len(labels_by_qid),
+        )
 
         records = []
         for qid in tqdm(sorted(collector_entities), desc="Parsing Wikidata collectors"):

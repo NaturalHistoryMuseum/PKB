@@ -17,22 +17,22 @@ from pkb.wikidata.parsers import property_value, property_values
 WIKIDATA_PEOPLE_SOURCE_DIR = settings.intermediate_dir / "sources" / "wikidata" / "people"
 
 
-def collect_related_qids_for_collectors(
+def collect_property_qids_for_collectors(
     entities: dict[str, dict],
 ) -> set[str]:
-    related_qids = set()
+    property_qids = set()
 
     for entity in entities.values():
         if not entity or entity.get("missing"):
             continue
 
-        related_qids.update(property_values(entity, "P27"))  # country of citizenship
-        related_qids.update(property_values(entity, "P108"))  # employer
+        property_qids.update(property_values(entity, "P27"))  # country of citizenship
+        property_qids.update(property_values(entity, "P108"))  # employer
 
         if gender := property_value(entity, "P21"):
-            related_qids.add(gender)
+            property_qids.add(gender)
 
-    return related_qids
+    return property_qids
 
 
 def read_entities_from_manifest(path: str) -> dict[str, dict]:
@@ -103,13 +103,13 @@ class WikiDataCollectorEntitiesSourceTask(WikiDataEntitiesSourceTask):
         return WikiDataCollectorIDsSourceTask()
 
 
-class WikiDataRelatedCollectorEntityBatchSourceTask(WikiDataEntityBatchSourceTask):
+class WikiDataCollectorPropertyEntityBatchSourceTask(WikiDataEntityBatchSourceTask):
     """Store one raw wbgetentities batch for entities referenced by collectors."""
 
-    dataset = "wikidata_related_collector_entities"
-    output_dir = WIKIDATA_PEOPLE_SOURCE_DIR / "related-collector-entity-batches"
-    s3_key_prefix = "wikidata/people/related-collector-entities"
-    entity_label = "related collector entities"
+    dataset = "wikidata_collector_property_entities"
+    output_dir = WIKIDATA_PEOPLE_SOURCE_DIR / "collector-property-entity-batches"
+    s3_key_prefix = "wikidata/people/collector-property-entities"
+    entity_label = "collector property entities"
     ids_source_task_class = WikiDataCollectorIDsSourceTask
 
     def requires(self):
@@ -117,26 +117,26 @@ class WikiDataRelatedCollectorEntityBatchSourceTask(WikiDataEntityBatchSourceTas
 
     def qids(self) -> list[str]:
         collector_entities = read_entities_from_manifest(self.input().path)
-        return sorted(collect_related_qids_for_collectors(collector_entities))
+        return sorted(collect_property_qids_for_collectors(collector_entities))
 
 
-class WikiDataRelatedCollectorEntitiesSourceTask(WikiDataEntitiesSourceTask):
+class WikiDataCollectorPropertyEntitiesSourceTask(WikiDataEntitiesSourceTask):
     """Store raw wbgetentities batches for entities referenced by collectors."""
 
-    dataset = "wikidata_related_collector_entities"
+    dataset = "wikidata_collector_property_entities"
     output_path = (
-        WIKIDATA_PEOPLE_SOURCE_DIR / "related_collector_entities.dataset-version.json"
+        WIKIDATA_PEOPLE_SOURCE_DIR / "collector_property_entities.dataset-version.json"
     )
-    s3_key_prefix = "wikidata/people/related-collector-entities"
-    entity_label = "related collector entities"
-    batch_task_class = WikiDataRelatedCollectorEntityBatchSourceTask
+    s3_key_prefix = "wikidata/people/collector-property-entities"
+    entity_label = "collector property entities"
+    batch_task_class = WikiDataCollectorPropertyEntityBatchSourceTask
 
     def requires(self):
         return WikiDataCollectorEntitiesSourceTask()
 
     def qids(self) -> list[str]:
         collector_entities = read_entities_from_manifest(self.input().path)
-        return sorted(collect_related_qids_for_collectors(collector_entities))
+        return sorted(collect_property_qids_for_collectors(collector_entities))
 
 
 if __name__ == "__main__":

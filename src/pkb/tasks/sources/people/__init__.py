@@ -2,16 +2,12 @@
 
 from pkb.tasks.sources.people.wikidata import (
     WikiDataCollectorEntitiesSourceTask,
-    WikiDataCollectorEntityBatchSourceTask,
     WikiDataCollectorIDsSourceTask,
-    WikiDataRelatedCollectorEntitiesSourceTask,
-    WikiDataRelatedCollectorEntityBatchSourceTask,
+    WikiDataCollectorPropertyEntitiesSourceTask,
 )
 
 __all__ = [
     "WikiDataCollectorEntitiesSourceTask",
-    "WikiDataCollectorEntityBatchSourceTask",
     "WikiDataCollectorIDsSourceTask",
-    "WikiDataRelatedCollectorEntitiesSourceTask",
-    "WikiDataRelatedCollectorEntityBatchSourceTask",
+    "WikiDataCollectorPropertyEntitiesSourceTask",
 ]
