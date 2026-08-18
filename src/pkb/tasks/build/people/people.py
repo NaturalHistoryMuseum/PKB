@@ -4,6 +4,7 @@ import luigi
 import pandas as pd
 
 from pkb.config import settings
+from pkb.models.people import PersonAggregator
 from pkb.tasks.base import BaseTask
 from pkb.tasks.build.people.bionomia import BionomiaPeopleTask
 from pkb.tasks.build.people.harvard import HarvardIndexPeopleTask
@@ -11,39 +12,42 @@ from pkb.tasks.build.people.wikidata import WikiDataPeopleTask
 
 
 class PeopleTask(BaseTask):
-    """Build the current Phase 1 Person backbone table.
-
-    This is intentionally conservative while person aggregation is being
-    refactored: Wikidata collector records are exposed as the first source of
-    person identities, with additional sources joining here as resolution work
-    moves out of notebooks.
-    """
+    """Build the current Phase 1 Person backbone table."""
 
     def requires(self):
-        return [
-            WikiDataPeopleTask(),
-            BionomiaPeopleTask(),
-            HarvardIndexPeopleTask(),
-            # IPNIAuthorSourceTask(),
-        ]
+        return {
+            "wikidata": WikiDataPeopleTask(),
+            "bionomia": BionomiaPeopleTask(),
+            "harvard_index": HarvardIndexPeopleTask(),
+            # "ipni_authors": IPNIAuthorSourceTask(),
+        }
 
     def output(self):
-        return luigi.LocalTarget(settings.intermediate_dir / "people" / "people.parquet")
+        people_dir = settings.intermediate_dir / "people"
+        return {
+            "people": luigi.LocalTarget(people_dir / "people.parquet"),
+            "source_links": luigi.LocalTarget(
+                people_dir / "person_source_links.parquet"
+            ),
+        }
 
     def run(self):
-        wikidata_people = pd.read_parquet(WikiDataPeopleTask().output().path)
-        bionomia_people = pd.read_parquet(BionomiaPeopleTask().output().path)
-        harvard_people = pd.read_parquet(HarvardIndexPeopleTask().output().path)
-        people = pd.concat(
+        source_people = pd.concat(
             [
-                wikidata_people,
-                bionomia_people,
-                harvard_people,
+                pd.read_parquet(target.path)
+                for target in self.input().values()
             ],
             ignore_index=True,
             sort=False,
         )
-        people.to_parquet(self.output().path, index=False)
+        result = PersonAggregator().aggregate(source_people)
+        output = self.output()
+
+        result.people.to_parquet(output["people"].path, index=False)
+        result.source_links.to_parquet(
+            output["source_links"].path,
+            index=False,
+        )
 
 
 if __name__ == "__main__":

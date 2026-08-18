@@ -131,25 +131,45 @@ def test_bionomia_people_build_maps_public_profiles(monkeypatch, tmp_path):
     assert list(rows[1]["keywords"]) == ["Taxonomist"]
 
 
-def test_people_task_includes_bionomia_people(monkeypatch, tmp_path):
+def test_people_task_aggregates_people_and_writes_source_links(monkeypatch, tmp_path):
     from pkb.tasks.build.people.people import PeopleTask
     import pkb.tasks.build.people.people as people_module
 
     wikidata_path = tmp_path / "wikidata_people.parquet"
     bionomia_path = tmp_path / "bionomia_people.parquet"
     harvard_path = tmp_path / "harvard_index_people.parquet"
-    pd.DataFrame([{"pkbPersonKey": "wikidata:Q1", "source": "wikidata"}]).to_parquet(
-        wikidata_path,
-        index=False,
-    )
-    pd.DataFrame([{"pkbPersonKey": "bionomia:0000-0002", "source": "bionomia"}]).to_parquet(
-        bionomia_path,
-        index=False,
-    )
-    pd.DataFrame([{"pkbPersonKey": "harvard_index:5", "source": "harvard_index"}]).to_parquet(
-        harvard_path,
-        index=False,
-    )
+    pd.DataFrame(
+        [
+            {
+                "pkbPersonKey": "wikidata:Q1",
+                "source": "wikidata",
+                "wikidataID": "Q1",
+                "harvardIndexID": "5",
+                "name": "Jane Collector",
+            }
+        ]
+    ).to_parquet(wikidata_path, index=False)
+    pd.DataFrame(
+        [
+            {
+                "pkbPersonKey": "bionomia:0000-0002",
+                "source": "bionomia",
+                "wikidataID": "Q1",
+                "bionomiaID": "0000-0002",
+                "name": "J. Collector",
+            }
+        ]
+    ).to_parquet(bionomia_path, index=False)
+    pd.DataFrame(
+        [
+            {
+                "pkbPersonKey": "harvard_index:5",
+                "source": "harvard_index",
+                "harvardIndexID": "5",
+                "name": "Jane A. Collector",
+            }
+        ]
+    ).to_parquet(harvard_path, index=False)
 
     monkeypatch.setattr(
         people_module.WikiDataPeopleTask,
@@ -169,11 +189,23 @@ def test_people_task_includes_bionomia_people(monkeypatch, tmp_path):
     monkeypatch.setattr(
         PeopleTask,
         "output",
-        lambda self: luigi.LocalTarget(tmp_path / "people.parquet"),
+        lambda self: {
+            "people": luigi.LocalTarget(tmp_path / "people.parquet"),
+            "source_links": luigi.LocalTarget(tmp_path / "person_source_links.parquet"),
+        },
     )
 
     task = PeopleTask()
     task.run()
 
-    df = pd.read_parquet(task.output().path)
-    assert df["source"].tolist() == ["wikidata", "bionomia", "harvard_index"]
+    people = pd.read_parquet(task.output()["people"].path)
+    source_links = pd.read_parquet(task.output()["source_links"].path)
+
+    assert len(people) == 1
+    assert people.iloc[0]["name"] == "Jane A. Collector"
+    assert people.iloc[0]["sourceCount"] == 3
+    assert sorted(source_links["sourcePersonKey"].tolist()) == [
+        "bionomia:0000-0002",
+        "harvard_index:5",
+        "wikidata:Q1",
+    ]

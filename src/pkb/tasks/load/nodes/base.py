@@ -13,6 +13,7 @@ class LoadParquetNodesToGraph(luigi.Task):
     label = luigi.Parameter()
     key_field = luigi.Parameter()
     batch_size = luigi.IntParameter(default=1000)
+    input_name: str | None = None
     
     exclude_fields: tuple[str, ...] = ()
 
@@ -22,7 +23,7 @@ class LoadParquetNodesToGraph(luigi.Task):
         )
 
     def output(self) -> luigi.LocalTarget:
-        input_path = Path(self.input().path)
+        input_path = Path(self.input_target().path)
 
         output_file = (
             settings.intermediate_dir
@@ -34,8 +35,14 @@ class LoadParquetNodesToGraph(luigi.Task):
 
         return luigi.LocalTarget(str(output_file))
 
+    def input_target(self):
+        task_input = self.input()
+        if self.input_name:
+            return task_input[self.input_name]
+        return task_input
+
     def run(self) -> None:
-        input_path = self.input().path
+        input_path = self.input_target().path
 
         logger.info(
             "Loading %s into graph as %s nodes",

@@ -1,6 +1,7 @@
 import luigi
 from pathlib import Path
 
+
 class BaseTask(luigi.Task):
 
     force = luigi.BoolParameter(default=False, significant=False)
@@ -16,7 +17,20 @@ class BaseTask(luigi.Task):
         return super().complete()  
     
     def ensure_output_dir(self):
-        if self.output():            
-            print(Path(self.output().path).parent)
-            return Path(self.output().path).parent.mkdir(parents=True, exist_ok=True)
-        
+        for output in self._flatten_outputs(self.output()):
+            Path(output.path).parent.mkdir(parents=True, exist_ok=True)
+
+    def _flatten_outputs(self, output):
+        if not output:
+            return []
+        if isinstance(output, dict):
+            outputs = []
+            for value in output.values():
+                outputs.extend(self._flatten_outputs(value))
+            return outputs
+        if isinstance(output, (list, tuple)):
+            outputs = []
+            for value in output:
+                outputs.extend(self._flatten_outputs(value))
+            return outputs
+        return [output]

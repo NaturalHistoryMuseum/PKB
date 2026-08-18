@@ -10,6 +10,7 @@ from pkb.tasks.load.nodes.base import LoadParquetNodesToGraph
 class LoadPersonNodes(LoadParquetNodesToGraph):
     label = Labels.PERSON
     key_field = "pkbPersonKey"
+    input_name = "people"
 
     def requires(self):
         return PeopleTask()
