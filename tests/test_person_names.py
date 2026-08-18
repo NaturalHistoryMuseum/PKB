@@ -15,6 +15,7 @@ def test_parse_person_name_handles_surname_first_huh_full_name():
     assert name.surname == "sartorius"
     assert name.given_names == ("carl", "christian", "wilhelm")
     assert name.initials == "ccw"
+    assert name.initial_tokens == ()
     assert name.full_name == "carl christian wilhelm sartorius"
     assert name.alternate_names == ("carlos",)
 
@@ -24,9 +25,10 @@ def test_parse_person_name_handles_initialled_standard_name():
 
     assert name is not None
     assert name.surname == "sartorius"
-    assert name.given_names == ("c", "c", "w")
+    assert name.given_names == ()
     assert name.initials == "ccw"
-    assert name.full_name == "c c w sartorius"
+    assert name.initial_tokens == ("c", "c", "w")
+    assert name.full_name == "sartorius"
 
 
 def test_person_names_match_by_given_names_when_full_names_align():

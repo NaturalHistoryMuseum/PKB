@@ -40,6 +40,7 @@ class ParsedPersonName:
     surname: str | None
     given_names: tuple[str, ...]
     initials: str
+    initial_tokens: tuple[str, ...]
     alternate_names: tuple[str, ...] = ()
 
     @property
@@ -76,15 +77,17 @@ def parse_person_name(value) -> ParsedPersonName | None:
         given_names = tokens[:-1]
 
     surname = _normalise_token(surname) if surname else None
-    given_names = tuple(
+    given_tokens = tuple(
         token
         for token in (_normalise_token(token) for token in given_names)
         if token and token not in TITLE_WORDS | SUFFIX_WORDS
     )
+    initial_tokens = tuple(token for token in given_tokens if len(token) == 1)
+    given_names = tuple(token for token in given_tokens if len(token) > 1)
 
-    tokens = (*given_names, *([surname] if surname else []))
+    tokens = (*given_tokens, *([surname] if surname else []))
     canonical = " ".join(tokens)
-    initials = "".join(_initial(token) for token in given_names)
+    initials = "".join(initial_tokens) or "".join(_initial(token) for token in given_names)
 
     return ParsedPersonName(
         original=original,
@@ -92,6 +95,7 @@ def parse_person_name(value) -> ParsedPersonName | None:
         surname=surname,
         given_names=given_names,
         initials=initials,
+        initial_tokens=initial_tokens,
         alternate_names=alternate_names,
     )
 
@@ -102,7 +106,10 @@ def person_names_match_by_given_names(
 ) -> bool:
     if not a or not b or not a.surname or not b.surname:
         return False
-    return a.surname == b.surname and a.given_names == b.given_names
+    return bool(a.given_names and b.given_names) and (
+        a.surname == b.surname
+        and a.given_names == b.given_names
+    )
 
 
 def person_names_match_by_initials(
@@ -126,7 +133,9 @@ def person_names_compatible(
     if a.surname != b.surname:
         return False
 
-    shorter, longer = sorted([a.given_names, b.given_names], key=len)
+    tokens_a = _comparison_given_tokens(a)
+    tokens_b = _comparison_given_tokens(b)
+    shorter, longer = sorted([tokens_a, tokens_b], key=len)
     if not shorter or not longer:
         return False
 
@@ -184,3 +193,7 @@ def _normalise_token(value: str | None) -> str | None:
 
 def _initial(value: str) -> str:
     return value[:1]
+
+
+def _comparison_given_tokens(name: ParsedPersonName) -> tuple[str, ...]:
+    return name.given_names or name.initial_tokens
