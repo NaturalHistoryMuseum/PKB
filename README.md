@@ -24,6 +24,10 @@ pkb.tasks.sources.people.wikidata.WikiDataCollectorIDsSourceTask
 pkb.tasks.sources.institutions.grscicol.GRSciCollInstitutionsTSVSourceTask
   -> data/intermediate/sources/grscicol/institutions.dataset-version.json
   -> s3://pkb-source-data/grscicol/institutions/source.tsv
+
+pkb.tasks.sources.people.bionomia.BionomiaPublicProfilesSourceTask
+  -> data/intermediate/sources/bionomia/people/public_profiles.dataset-version.json
+  -> s3://pkb-source-data/bionomia/people/public-profiles/source.csv
 ```
 
 ### Build Tasks Produce Files
@@ -43,6 +47,9 @@ pkb.tasks.build.institutions.grscicol.GRSciCollCollectionsTSVTask
 
 pkb.tasks.build.institutions.institutions.InstitutionsTask
   -> data/intermediate/institutions/institutions.parquet
+
+pkb.tasks.build.people.bionomia.BionomiaPeopleTask
+  -> data/intermediate/people/bionomia_people.parquet
 ```
 
 Wikidata domains should reuse the shared source task pattern:
