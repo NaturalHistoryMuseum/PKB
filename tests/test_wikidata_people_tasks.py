@@ -71,20 +71,58 @@ def test_collector_property_ids_task_derives_qids_from_collector_manifest(
 ):
     import pkb.tasks.sources.people.wikidata as source_module
 
+    source_object = SourceObject(
+        s3_bucket="pkb-source-data",
+        s3_key="wikidata/people/collector-entities/batch-00000.json",
+        s3_version_id="collector-version",
+        sha256="sha",
+        size=0,
+    )
+    manifest = DatasetVersion(
+        dataset="wikidata_collector_entities",
+        retrieved_at=datetime(2026, 8, 17, 12, 0, tzinfo=UTC),
+        source_url="https://www.wikidata.org/w/api.php",
+        source_objects=[source_object],
+    )
+    manifest_path = tmp_path / "collector_entities.dataset-version.json"
+    manifest_path.write_text(json.dumps(dataset_version_to_dict(manifest)))
+
     monkeypatch.setattr(
         WikiDataCollectorPropertyIDsTask,
         "input",
-        lambda self: luigi.LocalTarget(tmp_path / "collector_entities.dataset-version.json"),
-    )
-    monkeypatch.setattr(
-        source_module,
-        "collect_property_qids_from_manifest",
-        lambda path: ["Q145"],
+        lambda self: luigi.LocalTarget(manifest_path),
     )
     monkeypatch.setattr(
         WikiDataCollectorPropertyIDsTask,
         "output",
         lambda self: luigi.LocalTarget(tmp_path / "collector_property_ids.json"),
+    )
+    monkeypatch.setattr(source_module, "get_s3_client", lambda: "s3-client")
+    monkeypatch.setattr(
+        source_module,
+        "fetch_source_object",
+        lambda **kwargs: json.dumps(
+            {
+                "entities": {
+                    "Q1": {
+                        "claims": {
+                            "P27": [
+                                {
+                                    "mainsnak": {
+                                        "datavalue": {
+                                            "value": {
+                                                "entity-type": "item",
+                                                "numeric-id": 145,
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        ).encode(),
     )
 
     task = WikiDataCollectorPropertyIDsTask()

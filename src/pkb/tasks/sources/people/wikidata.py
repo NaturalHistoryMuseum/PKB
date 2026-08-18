@@ -40,51 +40,13 @@ def read_entities_from_manifest(path: str) -> dict[str, dict]:
     dataset_version = read_dataset_version(path)
     s3 = get_s3_client()
     entities = {}
-    source_objects = dataset_version.source_objects or []
 
-    for index, source_object in enumerate(source_objects, start=1):
+    for source_object in dataset_version.source_objects or []:
         data = fetch_source_object(s3=s3, source_object=source_object)
         payload = json.loads(data)
         entities.update(payload.get("entities", {}))
-        if index % 100 == 0:
-            logger.info(
-                "Read %s/%s source objects from %s",
-                index,
-                len(source_objects),
-                path,
-            )
 
     return entities
-
-
-def collect_property_qids_from_manifest(path: str) -> list[str]:
-    dataset_version = read_dataset_version(path)
-    s3 = get_s3_client()
-    property_qids: set[str] = set()
-    source_objects = dataset_version.source_objects or []
-
-    for index, source_object in enumerate(source_objects, start=1):
-        data = fetch_source_object(s3=s3, source_object=source_object)
-        payload = json.loads(data)
-        property_qids.update(
-            collect_property_qids_for_collectors(payload.get("entities", {}))
-        )
-        if index % 100 == 0:
-            logger.info(
-                "Scanned %s/%s collector entity source objects; found %s property QIDs",
-                index,
-                len(source_objects),
-                len(property_qids),
-            )
-
-    return sorted(property_qids)
-
-
-def read_qids(path: str) -> list[str]:
-    with open(path) as f:
-        payload = json.load(f)
-
-    return payload["qids"]
 
 
 class WikiDataCollectorIDsSourceTask(WikiDataSPARQLSourceTask):
@@ -154,7 +116,8 @@ class WikiDataCollectorPropertyIDsTask(BaseTask):
         return luigi.LocalTarget(self.output_path)
 
     def run(self):
-        qids = collect_property_qids_from_manifest(self.input().path)
+        collector_entities = read_entities_from_manifest(self.input().path)
+        qids = sorted(collect_property_qids_for_collectors(collector_entities))
 
         with self.output().open("w") as f:
             json.dump(
@@ -179,7 +142,8 @@ class WikiDataCollectorPropertyEntityBatchSourceTask(WikiDataEntityBatchSourceTa
     ids_source_task_class = WikiDataCollectorPropertyIDsTask
 
     def qids(self) -> list[str]:
-        return read_qids(self.input().path)
+        with self.input().open("r") as f:
+            return json.load(f)["qids"]
 
 
 class WikiDataCollectorPropertyEntitiesSourceTask(WikiDataEntitiesSourceTask):
@@ -197,7 +161,8 @@ class WikiDataCollectorPropertyEntitiesSourceTask(WikiDataEntitiesSourceTask):
         return WikiDataCollectorPropertyIDsTask()
 
     def qids(self) -> list[str]:
-        return read_qids(self.input().path)
+        with self.input().open("r") as f:
+            return json.load(f)["qids"]
 
 
 if __name__ == "__main__":
