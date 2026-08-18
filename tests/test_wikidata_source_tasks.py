@@ -6,6 +6,7 @@ from pathlib import Path
 
 import luigi
 import pandas as pd
+import pytest
 
 from pkb.storage import DatasetVersion, SourceObject, dataset_version_to_dict
 from pkb.tasks.sources.wikidata import (
@@ -227,6 +228,53 @@ def test_wikidata_entities_source_task_yields_batches_and_combines_manifests(
         next(run)
     except StopIteration:
         pass
+
+    with open(task.output().path) as f:
+        manifest = json.load(f)
+
+    assert [obj["s3_key"] for obj in manifest["source_objects"]] == [
+        "wikidata/example/entities/batch-00000.json",
+        "wikidata/example/entities/batch-00001.json",
+    ]
+
+
+def test_wikidata_entities_source_task_finishes_when_batches_are_complete(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(ExampleEntitiesSourceTask, "qids", lambda self: ["Q1", "Q2", "Q3"])
+    monkeypatch.setattr(ExampleEntityBatchSourceTask, "output_dir", tmp_path / "batches")
+    monkeypatch.setattr(
+        ExampleEntitiesSourceTask,
+        "output",
+        lambda self: luigi.LocalTarget(tmp_path / "entities.dataset-version.json"),
+    )
+
+    for batch_index in range(2):
+        source_object = SourceObject(
+            s3_bucket="pkb-source-data",
+            s3_key=f"wikidata/example/entities/batch-{batch_index:05d}.json",
+            s3_version_id=f"version-{batch_index}",
+            sha256="sha",
+            size=10,
+        )
+        batch_manifest = DatasetVersion(
+            dataset="wikidata_example_entities",
+            retrieved_at=datetime(2026, 8, 17, 12, 0, tzinfo=UTC),
+            source_url="https://www.wikidata.org/w/api.php",
+            source_objects=[source_object],
+        )
+        batch_task = ExampleEntityBatchSourceTask(batch_index=batch_index)
+        Path(batch_task.output().path).parent.mkdir(parents=True, exist_ok=True)
+        Path(batch_task.output().path).write_text(
+            json.dumps(dataset_version_to_dict(batch_manifest))
+        )
+
+    task = ExampleEntitiesSourceTask()
+    run = task.run()
+
+    with pytest.raises(StopIteration):
+        next(run)
 
     with open(task.output().path) as f:
         manifest = json.load(f)

@@ -153,8 +153,17 @@ class WikiDataEntitiesSourceTask(BaseTask, metaclass=ABCMeta):
             self.batch_task_class(batch_index=batch_index)
             for batch_index in range(total_batches)
         ]
+        incomplete_batch_tasks = [
+            batch_task for batch_task in batch_tasks if not batch_task.complete()
+        ]
 
-        yield batch_tasks
+        if incomplete_batch_tasks:
+            logger.info(
+                "Yielding %s incomplete Wikidata entity batch tasks for %s",
+                len(incomplete_batch_tasks),
+                self.dataset,
+            )
+            yield incomplete_batch_tasks
 
         retrieved_at = datetime.now(UTC)
         source_objects: list[SourceObject] = []
