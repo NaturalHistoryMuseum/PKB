@@ -9,6 +9,7 @@ import pandas as pd
 from pkb.storage import DatasetVersion, SourceObject, dataset_version_to_dict
 from pkb.tasks.sources.people.wikidata import (
     WikiDataCollectorPropertyEntitiesSourceTask,
+    WikiDataCollectorPropertyIDsTask,
     collect_property_qids_for_collectors,
 )
 
@@ -64,38 +65,48 @@ def test_collect_property_qids_for_collectors_finds_property_entities():
     }
 
 
-def test_collector_property_entities_source_derives_qids_from_collector_manifest(
+def test_collector_property_ids_task_derives_qids_from_collector_manifest(
     monkeypatch,
     tmp_path,
 ):
     import pkb.tasks.sources.people.wikidata as source_module
 
     monkeypatch.setattr(
-        WikiDataCollectorPropertyEntitiesSourceTask,
+        WikiDataCollectorPropertyIDsTask,
         "input",
         lambda self: luigi.LocalTarget(tmp_path / "collector_entities.dataset-version.json"),
     )
     monkeypatch.setattr(
         source_module,
-        "read_entities_from_manifest",
-        lambda path: {
-            "Q1": {
-                "claims": {
-                    "P27": [
-                        {
-                            "mainsnak": {
-                                "datavalue": {
-                                    "value": {
-                                        "entity-type": "item",
-                                        "numeric-id": 145,
-                                    }
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        },
+        "collect_property_qids_from_manifest",
+        lambda path: ["Q145"],
+    )
+    monkeypatch.setattr(
+        WikiDataCollectorPropertyIDsTask,
+        "output",
+        lambda self: luigi.LocalTarget(tmp_path / "collector_property_ids.json"),
+    )
+
+    task = WikiDataCollectorPropertyIDsTask()
+    task.run()
+
+    with open(task.output().path) as f:
+        payload = json.load(f)
+
+    assert payload["qids"] == ["Q145"]
+
+
+def test_collector_property_entities_source_reads_cached_property_qids(
+    monkeypatch,
+    tmp_path,
+):
+    qids_path = tmp_path / "collector_property_ids.json"
+    qids_path.write_text(json.dumps({"qids": ["Q145"]}))
+
+    monkeypatch.setattr(
+        WikiDataCollectorPropertyEntitiesSourceTask,
+        "input",
+        lambda self: luigi.LocalTarget(qids_path),
     )
 
     assert WikiDataCollectorPropertyEntitiesSourceTask().qids() == ["Q145"]

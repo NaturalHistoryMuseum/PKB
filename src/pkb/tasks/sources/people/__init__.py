@@ -9,6 +9,7 @@ from pkb.tasks.sources.people.harvard import (
 from pkb.tasks.sources.people.wikidata import (
     WikiDataCollectorEntitiesSourceTask,
     WikiDataCollectorIDsSourceTask,
+    WikiDataCollectorPropertyIDsTask,
     WikiDataCollectorPropertyEntitiesSourceTask,
 )
 
@@ -20,4 +21,5 @@ __all__ = [
     "WikiDataCollectorEntitiesSourceTask",
     "WikiDataCollectorIDsSourceTask",
     "WikiDataCollectorPropertyEntitiesSourceTask",
+    "WikiDataCollectorPropertyIDsTask",
 ]

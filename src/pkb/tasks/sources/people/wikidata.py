@@ -4,8 +4,9 @@ import json
 
 import luigi
 
-from pkb.config import settings
+from pkb.config import logger, settings
 from pkb.storage import fetch_source_object, get_s3_client, read_dataset_version
+from pkb.tasks.base import BaseTask
 from pkb.tasks.sources.wikidata import (
     WikiDataEntityBatchSourceTask,
     WikiDataEntitiesSourceTask,
@@ -39,13 +40,51 @@ def read_entities_from_manifest(path: str) -> dict[str, dict]:
     dataset_version = read_dataset_version(path)
     s3 = get_s3_client()
     entities = {}
+    source_objects = dataset_version.source_objects or []
 
-    for source_object in dataset_version.source_objects or []:
+    for index, source_object in enumerate(source_objects, start=1):
         data = fetch_source_object(s3=s3, source_object=source_object)
         payload = json.loads(data)
         entities.update(payload.get("entities", {}))
+        if index % 100 == 0:
+            logger.info(
+                "Read %s/%s source objects from %s",
+                index,
+                len(source_objects),
+                path,
+            )
 
     return entities
+
+
+def collect_property_qids_from_manifest(path: str) -> list[str]:
+    dataset_version = read_dataset_version(path)
+    s3 = get_s3_client()
+    property_qids: set[str] = set()
+    source_objects = dataset_version.source_objects or []
+
+    for index, source_object in enumerate(source_objects, start=1):
+        data = fetch_source_object(s3=s3, source_object=source_object)
+        payload = json.loads(data)
+        property_qids.update(
+            collect_property_qids_for_collectors(payload.get("entities", {}))
+        )
+        if index % 100 == 0:
+            logger.info(
+                "Scanned %s/%s collector entity source objects; found %s property QIDs",
+                index,
+                len(source_objects),
+                len(property_qids),
+            )
+
+    return sorted(property_qids)
+
+
+def read_qids(path: str) -> list[str]:
+    with open(path) as f:
+        payload = json.load(f)
+
+    return payload["qids"]
 
 
 class WikiDataCollectorIDsSourceTask(WikiDataSPARQLSourceTask):
@@ -103,6 +142,33 @@ class WikiDataCollectorEntitiesSourceTask(WikiDataEntitiesSourceTask):
         return WikiDataCollectorIDsSourceTask()
 
 
+class WikiDataCollectorPropertyIDsTask(BaseTask):
+    """Derive the Wikidata entity IDs referenced by collector claims."""
+
+    output_path = WIKIDATA_PEOPLE_SOURCE_DIR / "collector_property_ids.json"
+
+    def requires(self):
+        return WikiDataCollectorEntitiesSourceTask()
+
+    def output(self):
+        return luigi.LocalTarget(self.output_path)
+
+    def run(self):
+        qids = collect_property_qids_from_manifest(self.input().path)
+
+        with self.output().open("w") as f:
+            json.dump(
+                {
+                    "qids": qids,
+                },
+                f,
+                indent=2,
+                sort_keys=True,
+            )
+
+        logger.info("Derived %s collector property Wikidata entity IDs", len(qids))
+
+
 class WikiDataCollectorPropertyEntityBatchSourceTask(WikiDataEntityBatchSourceTask):
     """Store one raw wbgetentities batch for entities referenced by collectors."""
 
@@ -110,14 +176,10 @@ class WikiDataCollectorPropertyEntityBatchSourceTask(WikiDataEntityBatchSourceTa
     output_dir = WIKIDATA_PEOPLE_SOURCE_DIR / "collector-property-entity-batches"
     s3_key_prefix = "wikidata/people/collector-property-entities"
     entity_label = "collector property entities"
-    ids_source_task_class = WikiDataCollectorIDsSourceTask
-
-    def requires(self):
-        return WikiDataCollectorEntitiesSourceTask()
+    ids_source_task_class = WikiDataCollectorPropertyIDsTask
 
     def qids(self) -> list[str]:
-        collector_entities = read_entities_from_manifest(self.input().path)
-        return sorted(collect_property_qids_for_collectors(collector_entities))
+        return read_qids(self.input().path)
 
 
 class WikiDataCollectorPropertyEntitiesSourceTask(WikiDataEntitiesSourceTask):
@@ -132,11 +194,10 @@ class WikiDataCollectorPropertyEntitiesSourceTask(WikiDataEntitiesSourceTask):
     batch_task_class = WikiDataCollectorPropertyEntityBatchSourceTask
 
     def requires(self):
-        return WikiDataCollectorEntitiesSourceTask()
+        return WikiDataCollectorPropertyIDsTask()
 
     def qids(self) -> list[str]:
-        collector_entities = read_entities_from_manifest(self.input().path)
-        return sorted(collect_property_qids_for_collectors(collector_entities))
+        return read_qids(self.input().path)
 
 
 if __name__ == "__main__":
