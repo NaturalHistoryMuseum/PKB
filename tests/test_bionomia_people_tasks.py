@@ -137,12 +137,17 @@ def test_people_task_includes_bionomia_people(monkeypatch, tmp_path):
 
     wikidata_path = tmp_path / "wikidata_people.parquet"
     bionomia_path = tmp_path / "bionomia_people.parquet"
+    harvard_path = tmp_path / "harvard_index_people.parquet"
     pd.DataFrame([{"pkbPersonKey": "wikidata:Q1", "source": "wikidata"}]).to_parquet(
         wikidata_path,
         index=False,
     )
     pd.DataFrame([{"pkbPersonKey": "bionomia:0000-0002", "source": "bionomia"}]).to_parquet(
         bionomia_path,
+        index=False,
+    )
+    pd.DataFrame([{"pkbPersonKey": "harvard_index:5", "source": "harvard_index"}]).to_parquet(
+        harvard_path,
         index=False,
     )
 
@@ -157,6 +162,11 @@ def test_people_task_includes_bionomia_people(monkeypatch, tmp_path):
         lambda self: luigi.LocalTarget(bionomia_path),
     )
     monkeypatch.setattr(
+        people_module.HarvardIndexPeopleTask,
+        "output",
+        lambda self: luigi.LocalTarget(harvard_path),
+    )
+    monkeypatch.setattr(
         PeopleTask,
         "output",
         lambda self: luigi.LocalTarget(tmp_path / "people.parquet"),
@@ -166,4 +176,4 @@ def test_people_task_includes_bionomia_people(monkeypatch, tmp_path):
     task.run()
 
     df = pd.read_parquet(task.output().path)
-    assert df["source"].tolist() == ["wikidata", "bionomia"]
+    assert df["source"].tolist() == ["wikidata", "bionomia", "harvard_index"]

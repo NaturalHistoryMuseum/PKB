@@ -6,6 +6,7 @@ import pandas as pd
 from pkb.config import settings
 from pkb.tasks.base import BaseTask
 from pkb.tasks.build.people.bionomia import BionomiaPeopleTask
+from pkb.tasks.build.people.harvard import HarvardIndexPeopleTask
 from pkb.tasks.build.people.wikidata import WikiDataPeopleTask
 
 
@@ -22,7 +23,7 @@ class PeopleTask(BaseTask):
         return [
             WikiDataPeopleTask(),
             BionomiaPeopleTask(),
-            # HarvardIndexDetailTask(),
+            HarvardIndexPeopleTask(),
             # IPNIAuthorSourceTask(),
         ]
 
@@ -32,10 +33,12 @@ class PeopleTask(BaseTask):
     def run(self):
         wikidata_people = pd.read_parquet(WikiDataPeopleTask().output().path)
         bionomia_people = pd.read_parquet(BionomiaPeopleTask().output().path)
+        harvard_people = pd.read_parquet(HarvardIndexPeopleTask().output().path)
         people = pd.concat(
             [
                 wikidata_people,
                 bionomia_people,
+                harvard_people,
             ],
             ignore_index=True,
             sort=False,

@@ -28,6 +28,10 @@ pkb.tasks.sources.institutions.grscicol.GRSciCollInstitutionsTSVSourceTask
 pkb.tasks.sources.people.bionomia.BionomiaPublicProfilesSourceTask
   -> data/intermediate/sources/bionomia/people/public_profiles.dataset-version.json
   -> s3://pkb-source-data/bionomia/people/public-profiles/source.csv
+
+pkb.tasks.sources.people.harvard.HarvardIndexCollectorsSourceTask
+  -> data/intermediate/sources/harvard-index/people/collectors.dataset-version.json
+  -> s3://pkb-source-data/harvard-index/people/collectors/source.csv
 ```
 
 ### Build Tasks Produce Files
@@ -50,6 +54,9 @@ pkb.tasks.build.institutions.institutions.InstitutionsTask
 
 pkb.tasks.build.people.bionomia.BionomiaPeopleTask
   -> data/intermediate/people/bionomia_people.parquet
+
+pkb.tasks.build.people.harvard.HarvardIndexPeopleTask
+  -> data/intermediate/people/harvard_index_people.parquet
 ```
 
 Wikidata domains should reuse the shared source task pattern:
@@ -114,6 +121,15 @@ Graph labels and relationship names should be shared through `src/pkb/graph/sche
 Source tasks store raw upstream bytes in S3 and write a local manifest that points at the exact object version. Local development uses LocalStack S3; production uses AWS S3 through the same Boto3 client code.
 
 The source storage helper returns a `DatasetVersion` record containing the dataset name, source URL, retrieval time, SHA-256, size, S3 bucket, S3 key, S3 version ID, and optional upstream version.
+
+Archived local sources follow the same rule. For example,
+`data/assets/harvard-index/huh-collectors.csv` is a historical Harvard Index of
+Botanists scrape produced by `src/pkb/tasks/harvard.py`. The old scraper used
+`https://huh-it.s3.amazonaws.com/huh-agents.tab.txt` as its input, fetched
+Harvard Index detail pages, and wrote `data/assets/huh-collectors.csv`. Because
+that website workflow is no longer repeatably available, PKB keeps the archived
+files under `data/assets/harvard-index/` and versions the archived CSV into S3
+before building people-domain parquet.
 
 ## Current Layout
 

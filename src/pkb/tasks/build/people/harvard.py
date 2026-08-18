@@ -1,116 +1,110 @@
 from __future__ import annotations
 
+import ast
+from io import BytesIO
+
 import luigi
 import pandas as pd
-import requests_cache
-import yaml
-from bs4 import BeautifulSoup, SoupStrainer
-from typing import Any
 
 from pkb.config import logger, settings
+from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
 from pkb.tasks.base import BaseTask
-from pkb.utils.text import normalize_unicode
+from pkb.tasks.sources.people.harvard import HarvardIndexCollectorsSourceTask
 
 
 PEOPLE_DIR = settings.intermediate_dir / "people"
-HARVARD_INDEX_URL = "https://kiki.huh.harvard.edu/databases/botanist_search.php"
 
 
-def harvard_session() -> requests_cache.CachedSession:
-    return requests_cache.CachedSession(
-        cache_name=str(settings.cache_dir / "harvard"),
-        backend="sqlite",
-        expire_after=None,
+def _clean(value) -> str | None:
+    if value is None or pd.isna(value):
+        return None
+    value = str(value).strip()
+    if not value or value == "nan":
+        return None
+    return value
+
+
+def _parse_literal_collection(value) -> list[str]:
+    value = _clean(value)
+    if not value:
+        return []
+
+    try:
+        parsed = ast.literal_eval(value)
+    except (SyntaxError, ValueError):
+        return [value]
+
+    if isinstance(parsed, (set, list, tuple)):
+        return sorted(str(item) for item in parsed if _clean(item))
+
+    return [str(parsed)]
+
+
+def _name(row) -> str | None:
+    return (
+        _clean(row.get("Standard/Label Name"))
+        or _clean(row.get("Full Name"))
+        or _clean(row.get("Name"))
     )
 
 
-class HarvardAgentsFile(luigi.ExternalTask):
-    def output(self):
-        return luigi.LocalTarget(settings.assets_dir / "huh-agents.tab.txt")
+class HarvardIndexPeopleTask(BaseTask):
+    """Build People-domain rows from the archived Harvard Index scrape."""
 
-
-class HarvardIndexDetailTask(BaseTask):
-    """Fetch and parse detail pages for Harvard Index IDs."""
+    source_name = "harvard_index"
 
     def requires(self):
-        return HarvardAgentsFile()
+        return HarvardIndexCollectorsSourceTask()
 
     def output(self):
-        return luigi.LocalTarget(PEOPLE_DIR / "harvard_index_details.yaml")
+        return luigi.LocalTarget(PEOPLE_DIR / "harvard_index_people.parquet")
 
     def run(self):
-        session = harvard_session()
-        agents = pd.read_csv(self.input().path, sep="\t", dtype=str)
-
-        if "harvardIndexID" not in agents.columns:
-            raise ValueError("Harvard agents file must contain a harvardIndexID column")
-
-        with self.output().open("w") as outf:
-            for harvard_index_id in agents.harvardIndexID.dropna().drop_duplicates():
-                detail = self._parse_detail_page(session, harvard_index_id)
-
-                if not detail:
-                    continue
-
-                if botanist_id := detail.get("ASA Botanist ID"):
-                    try:
-                        _, asa_category = botanist_id.split()
-                    except ValueError:
-                        pass
-                    else:
-                        detail["asa_category"] = asa_category
-
-                yaml.safe_dump(
-                    detail,
-                    outf,
-                    default_flow_style=False,
-                    explicit_start=True,
-                    allow_unicode=True,
-                )
-
-    def _parse_detail_page(
-        self,
-        session: requests_cache.CachedSession,
-        collector_id: str,
-    ) -> dict[str, Any] | None:
-        response = session.get(
-            HARVARD_INDEX_URL,
-            params={"mode": "details", "id": collector_id},
+        dataset_version = read_dataset_version(self.input().path)
+        data = fetch_source_dataset(
+            s3=get_s3_client(),
+            dataset_version=dataset_version,
         )
-        response.raise_for_status()
+        source = pd.read_csv(BytesIO(data), dtype=str)
 
-        strainer = SoupStrainer("div", attrs={"id": "main_text_wide"})
-        soup = BeautifulSoup(response.content, "lxml", parse_only=strainer)
-
-        table = soup.find("table")
-        if table is None:
-            logger.error("Could not parse Harvard detail page for %s", collector_id)
-            return None
-
-        collector: dict[str, Any] = {"id": collector_id}
-
-        for tr in table.find_all("tr"):
-            label_cell = tr.find("td", {"class": "cap"})
-            value_cell = tr.find("td", {"class": "val"})
-
-            if label_cell is None or value_cell is None:
+        records = []
+        for _, row in source.iterrows():
+            harvard_index_id = _clean(row.get("id"))
+            if not harvard_index_id:
                 continue
 
-            label = normalize_unicode(label_cell.get_text(strip=True))
-            value = normalize_unicode(value_cell.get_text(strip=True))
+            records.append(
+                {
+                    "pkbPersonKey": f"{self.source_name}:{harvard_index_id}",
+                    "source": self.source_name,
+                    "harvardIndexID": harvard_index_id,
+                    "name": _name(row),
+                    "fullName": _clean(row.get("Full Name")),
+                    "standardName": _clean(row.get("Standard/Label Name")),
+                    "authorAbbreviation": _clean(row.get("B & P Author Abbrev.")),
+                    "dateOfBirth": _clean(row.get("Date of birth")),
+                    "dateOfDeath": _clean(row.get("Date of death")),
+                    "birthYear": _clean(row.get("birthYear")),
+                    "deathYear": _clean(row.get("deathYear")),
+                    "birthYearIsApprox": _clean(row.get("birthYearIsApprox")),
+                    "deathYearIsApprox": _clean(row.get("deathYearIsApprox")),
+                    "geographyISO": _parse_literal_collection(row.get("geographyISO")),
+                    "herbariaCode": _parse_literal_collection(row.get("herbariaCode")),
+                    "institutionUUID": _parse_literal_collection(row.get("institutionUUID")),
+                    "agentType": _clean(row.get("Agent type")),
+                    "url": _clean(row.get("URL")),
+                }
+            )
 
-            if label == "Variant name":
-                label = "Name"
+        people = pd.DataFrame(records)
+        people.to_parquet(self.output().path, index=False)
 
-            if label not in collector:
-                collector[label] = value
-            elif isinstance(collector[label], list):
-                collector[label].append(value)
-            else:
-                collector[label] = [collector[label], value]
-
-        return collector
+        logger.info(
+            "Wrote %s Harvard Index people to %s",
+            len(people),
+            self.output().path,
+        )
 
 
 if __name__ == "__main__":
-    luigi.build([HarvardIndexDetailTask()], local_scheduler=True)
+    luigi.build([HarvardIndexPeopleTask()], local_scheduler=True)
