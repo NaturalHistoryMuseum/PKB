@@ -32,6 +32,20 @@ SUFFIX_WORDS = {
     "frs",
 }
 
+PARTICLE_WORDS = {
+    "da",
+    "de",
+    "del",
+    "der",
+    "di",
+    "du",
+    "la",
+    "le",
+    "van",
+    "von",
+    "y",
+}
+
 
 @dataclass(frozen=True)
 class ParsedPersonName:
@@ -42,6 +56,7 @@ class ParsedPersonName:
     initials: str
     initial_tokens: tuple[str, ...]
     alternate_names: tuple[str, ...] = ()
+    alternate_canonical_names: tuple[str, ...] = ()
 
     @property
     def full_name(self) -> str | None:
@@ -58,6 +73,50 @@ def parse_person_name(value) -> ParsedPersonName | None:
     if not value:
         return None
 
+    parsed_names = parse_person_names(value)
+    if not parsed_names:
+        return None
+
+    return parsed_names[0]
+
+
+def parse_person_names(value) -> tuple[ParsedPersonName, ...]:
+    value = _clean_scalar(value)
+    if not value:
+        return ()
+
+    parsed_names = [
+        parsed_name
+        for name in _split_name_variants(value)
+        if (parsed_name := _parse_single_person_name(name))
+    ]
+    parsed_names = sorted(parsed_names, key=_name_expansion_score, reverse=True)
+    canonical_names = tuple(
+        dict.fromkeys(
+            parsed_name.canonical
+            for parsed_name in parsed_names
+            if parsed_name.canonical
+        )
+    )
+
+    return tuple(
+        ParsedPersonName(
+            original=parsed_name.original,
+            canonical=parsed_name.canonical,
+            surname=parsed_name.surname,
+            given_names=parsed_name.given_names,
+            initials=parsed_name.initials,
+            initial_tokens=parsed_name.initial_tokens,
+            alternate_names=parsed_name.alternate_names,
+            alternate_canonical_names=tuple(
+                name for name in canonical_names if name != parsed_name.canonical
+            ),
+        )
+        for parsed_name in parsed_names
+    )
+
+
+def _parse_single_person_name(value: str) -> ParsedPersonName | None:
     original = value
     value = strip_accents(value).replace("*", " ")
     alternate_names = tuple(
@@ -73,14 +132,13 @@ def parse_person_name(value) -> ParsedPersonName | None:
         given_names = _name_tokens(given_part)
     else:
         tokens = _name_tokens(value)
-        surname = tokens[-1] if tokens else None
-        given_names = tokens[:-1]
+        given_names, surname = _split_given_and_surname(tokens)
 
-    surname = _normalise_token(surname) if surname else None
+    surname = _normalise_name_phrase(surname) if surname else None
     given_tokens = tuple(
         token
         for token in (_normalise_token(token) for token in given_names)
-        if token and token not in TITLE_WORDS | SUFFIX_WORDS
+        if token and token not in TITLE_WORDS | SUFFIX_WORDS | PARTICLE_WORDS
     )
     initial_tokens = tuple(token for token in given_tokens if len(token) == 1)
     given_names = tuple(token for token in given_tokens if len(token) > 1)
@@ -169,6 +227,26 @@ def _clean_scalar(value) -> str | None:
     return value
 
 
+def _split_name_variants(value: str) -> tuple[str, ...]:
+    value = _clean_scalar(value)
+    if not value:
+        return ()
+
+    value = value.strip()
+    is_bracketed_list = value.startswith("[") and value.endswith("]")
+    if is_bracketed_list:
+        value = value[1:-1]
+
+    parts = [
+        part.strip(" '\"\n\t")
+        for part in re.split(r"\s*,\s*(?=[A-Z]\.\s|[A-Z][a-z])", value)
+    ]
+    if is_bracketed_list and len(parts) > 1:
+        return tuple(part for part in parts if part)
+
+    return (value,)
+
+
 def _clean_name_part(value: str) -> str:
     value = re.sub(r"[^A-Za-z0-9\s.]", " ", value)
     return re.sub(r"\s+", " ", value).strip()
@@ -183,6 +261,15 @@ def _name_tokens(value: str) -> tuple[str, ...]:
     )
 
 
+def _split_given_and_surname(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], str | None]:
+    if not tokens:
+        return (), None
+    normalised = tuple(_normalise_token(token) or "" for token in tokens)
+    if len(normalised) >= 3 and normalised[-2] in {"y", "e"}:
+        return tokens[:-3], " ".join(tokens[-3:])
+    return tokens[:-1], tokens[-1]
+
+
 def _normalise_token(value: str | None) -> str | None:
     if not value:
         return None
@@ -191,9 +278,28 @@ def _normalise_token(value: str | None) -> str | None:
     return value or None
 
 
+def _normalise_name_phrase(value: str | None) -> str | None:
+    if not value:
+        return None
+    tokens = [
+        token
+        for token in (_normalise_token(token) for token in value.split())
+        if token
+    ]
+    return " ".join(tokens) or None
+
+
 def _initial(value: str) -> str:
     return value[:1]
 
 
 def _comparison_given_tokens(name: ParsedPersonName) -> tuple[str, ...]:
     return name.given_names or name.initial_tokens
+
+
+def _name_expansion_score(name: ParsedPersonName) -> tuple[int, int, int]:
+    return (
+        len(name.given_names),
+        sum(len(given_name) for given_name in name.given_names),
+        len(name.initial_tokens),
+    )

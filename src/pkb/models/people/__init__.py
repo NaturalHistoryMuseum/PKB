@@ -4,6 +4,7 @@ from pkb.models.people.aggregation import PersonAggregationResult, PersonAggrega
 from pkb.models.people.names import (
     ParsedPersonName,
     parse_person_name,
+    parse_person_names,
     person_names_compatible,
     person_names_match_by_given_names,
     person_names_match_by_initials,
@@ -14,6 +15,7 @@ __all__ = [
     "PersonAggregationResult",
     "PersonAggregator",
     "parse_person_name",
+    "parse_person_names",
     "person_names_compatible",
     "person_names_match_by_given_names",
     "person_names_match_by_initials",
