@@ -59,9 +59,25 @@ class ParsedPersonName:
     alternate_canonical_names: tuple[str, ...] = ()
 
     @property
+    def verbatim(self) -> str:
+        return self.original
+
+    @property
+    def normalised(self) -> str:
+        return self.canonical
+
+    @property
     def full_name(self) -> str | None:
         parts = [*self.given_names, self.surname]
         return " ".join(part for part in parts if part) or None
+
+    @property
+    def given_names_text(self) -> str:
+        return " ".join(self.given_names)
+
+    @property
+    def initials_text(self) -> str:
+        return self.initials
 
     @property
     def tokens(self) -> tuple[str, ...]:

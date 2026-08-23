@@ -13,10 +13,14 @@ def test_parse_person_name_handles_surname_first_huh_full_name():
     name = parse_person_name("Sartorius, Carl (Carlos) *Christian Wilhelm")
 
     assert name is not None
+    assert name.verbatim == "Sartorius, Carl (Carlos) *Christian Wilhelm"
     assert name.surname == "sartorius"
     assert name.given_names == ("carl", "christian", "wilhelm")
+    assert name.given_names_text == "carl christian wilhelm"
     assert name.initials == "ccw"
+    assert name.initials_text == "ccw"
     assert name.initial_tokens == ()
+    assert name.normalised == "carl christian wilhelm sartorius"
     assert name.full_name == "carl christian wilhelm sartorius"
     assert name.alternate_names == ("carlos",)
 
