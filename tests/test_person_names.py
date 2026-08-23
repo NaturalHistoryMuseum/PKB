@@ -17,12 +17,10 @@ def test_parse_person_name_handles_surname_first_huh_full_name():
     assert name.surname == "sartorius"
     assert name.given_names == ("carl", "christian", "wilhelm")
     assert name.given_names_text == "carl christian wilhelm"
-    assert name.initials == "ccw"
+    assert name.initials == ("c", "c", "w")
     assert name.initials_text == "ccw"
-    assert name.initial_tokens == ()
     assert name.normalised == "carl christian wilhelm sartorius"
     assert name.full_name == "carl christian wilhelm sartorius"
-    assert name.alternate_names == ("carlos",)
 
 
 def test_parse_person_name_handles_initialled_standard_name():
@@ -30,10 +28,11 @@ def test_parse_person_name_handles_initialled_standard_name():
 
     assert name is not None
     assert name.surname == "sartorius"
-    assert name.given_names == ()
-    assert name.initials == "ccw"
-    assert name.initial_tokens == ("c", "c", "w")
-    assert name.full_name == "sartorius"
+    assert name.given_names == ("c", "c", "w")
+    assert name.given_names_text == "c c w"
+    assert name.initials == ("c", "c", "w")
+    assert name.initials_text == "ccw"
+    assert name.full_name == "c c w sartorius"
 
 
 def test_person_names_match_by_given_names_when_full_names_align():
@@ -61,8 +60,6 @@ def test_person_names_compatible_with_parenthetical_extra_given_name():
     assert person_names_match_by_given_names(a, b)
     assert person_names_match_by_initials(a, b)
     assert person_names_compatible(a, b)
-    assert a is not None
-    assert "carlos" in a.alternate_names
 
 
 def test_parse_person_names_orders_multiple_names_by_expansion():
@@ -72,12 +69,11 @@ def test_parse_person_names_orders_multiple_names_by_expansion():
     )
 
     assert len(names) == 3
-    assert names[0].surname == "clemente y rubio"
-    assert names[0].given_names == ("rojas",)
-    assert names[0].initials == "s"
-    assert names[0].initial_tokens == ("s",)
-    assert names[0].full_name == "rojas clemente y rubio"
-    assert "s r clemente y rubio" in names[0].alternate_canonical_names
+    assert names[0].verbatim == "S. de Rojas Clemente y Rubio"
+    assert names[0].surname == "de rojas clemente y rubio"
+    assert names[0].given_names == ("s",)
+    assert names[0].initials_text == "s"
+    assert names[0].full_name == "s de rojas clemente y rubio"
 
 
 def test_parse_person_name_chooses_most_expansive_name_variant():
@@ -87,5 +83,5 @@ def test_parse_person_name_chooses_most_expansive_name_variant():
     )
 
     assert name is not None
-    assert name.given_names == ("rojas",)
-    assert name.surname == "clemente y rubio"
+    assert name.verbatim == "S. de Rojas Clemente y Rubio"
+    assert name.surname == "de rojas clemente y rubio"
