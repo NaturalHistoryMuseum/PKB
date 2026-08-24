@@ -90,15 +90,7 @@ def test_harvard_index_people_build_maps_archived_collectors(monkeypatch, tmp_pa
     monkeypatch.setattr(
         HarvardIndexPeopleBuildTask,
         "output",
-        lambda self: {
-            "people": luigi.LocalTarget(tmp_path / "harvard_index_people.parquet"),
-            "deduplication_map": luigi.LocalTarget(
-                tmp_path / "harvard_index_person_deduplication_map.parquet"
-            ),
-            "clusters": luigi.LocalTarget(
-                tmp_path / "harvard_index_person_deduplication_clusters.parquet"
-            ),
-        },
+        lambda self: luigi.LocalTarget(tmp_path / "harvard_index_people.parquet"),
     )
     monkeypatch.setattr(
         build_module,
@@ -124,10 +116,13 @@ def test_harvard_index_people_build_maps_archived_collectors(monkeypatch, tmp_pa
     task = HarvardIndexPeopleBuildTask()
     task.run()
 
-    output = task.output()
-    df = pd.read_parquet(output["people"].path)
-    deduplication_map = pd.read_parquet(output["deduplication_map"].path)
-    clusters = pd.read_parquet(output["clusters"].path)
+    df = pd.read_parquet(task.output().path)
+    deduplication_map = pd.read_parquet(
+        tmp_path / "harvard_index_person_deduplication_map.parquet"
+    )
+    clusters = pd.read_parquet(
+        tmp_path / "harvard_index_person_deduplication_clusters.parquet"
+    )
     row = df.iloc[0].to_dict()
 
     assert row["pkbPersonKey"] == "harvard_index:5"
@@ -160,15 +155,7 @@ def test_harvard_index_people_build_logs_duplicate_count(
     monkeypatch.setattr(
         HarvardIndexPeopleBuildTask,
         "output",
-        lambda self: {
-            "people": luigi.LocalTarget(tmp_path / "harvard_index_people.parquet"),
-            "deduplication_map": luigi.LocalTarget(
-                tmp_path / "harvard_index_person_deduplication_map.parquet"
-            ),
-            "clusters": luigi.LocalTarget(
-                tmp_path / "harvard_index_person_deduplication_clusters.parquet"
-            ),
-        },
+        lambda self: luigi.LocalTarget(tmp_path / "harvard_index_people.parquet"),
     )
     monkeypatch.setattr(
         build_module,

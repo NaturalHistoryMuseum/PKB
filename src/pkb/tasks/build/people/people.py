@@ -34,7 +34,7 @@ class PeopleTask(BaseTask):
     def run(self):
         source_people = pd.concat(
             [
-                pd.read_parquet(_people_target(target).path)
+                pd.read_parquet(target.path)
                 for target in self.input().values()
             ],
             ignore_index=True,
@@ -48,12 +48,6 @@ class PeopleTask(BaseTask):
             output["source_links"].path,
             index=False,
         )
-
-
-def _people_target(target):
-    if isinstance(target, dict):
-        return target["people"]
-    return target
 
 
 if __name__ == "__main__":

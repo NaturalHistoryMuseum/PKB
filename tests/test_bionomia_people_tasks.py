@@ -184,15 +184,7 @@ def test_people_task_aggregates_people_and_writes_source_links(monkeypatch, tmp_
     monkeypatch.setattr(
         people_module.HarvardIndexPeopleBuildTask,
         "output",
-        lambda self: {
-            "people": luigi.LocalTarget(harvard_path),
-            "deduplication_map": luigi.LocalTarget(
-                tmp_path / "harvard_index_person_deduplication_map.parquet"
-            ),
-            "clusters": luigi.LocalTarget(
-                tmp_path / "harvard_index_person_deduplication_clusters.parquet"
-            ),
-        },
+        lambda self: luigi.LocalTarget(harvard_path),
     )
     monkeypatch.setattr(
         PeopleTask,

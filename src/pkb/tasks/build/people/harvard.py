@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from io import BytesIO
+from pathlib import Path
 
 import luigi
 import pandas as pd
@@ -58,15 +59,7 @@ class HarvardIndexPeopleBuildTask(BaseTask):
         return HarvardIndexCollectorsSourceTask()
 
     def output(self):
-        return {
-            "people": luigi.LocalTarget(PEOPLE_DIR / "harvard_index_people.parquet"),
-            "deduplication_map": luigi.LocalTarget(
-                PEOPLE_DIR / "harvard_index_person_deduplication_map.parquet"
-            ),
-            "clusters": luigi.LocalTarget(
-                PEOPLE_DIR / "harvard_index_person_deduplication_clusters.parquet"
-            ),
-        }
+        return luigi.LocalTarget(PEOPLE_DIR / "harvard_index_people.parquet")
 
     def run(self):
         dataset_version = read_dataset_version(self.input().path)
@@ -112,13 +105,17 @@ class HarvardIndexPeopleBuildTask(BaseTask):
             result.deduplication_map,
         )
         output = self.output()
+        output_path = Path(output.path)
 
-        deduplicated_people.to_parquet(output["people"].path, index=False)
         result.deduplication_map.to_parquet(
-            output["deduplication_map"].path,
+            output_path.with_name("harvard_index_person_deduplication_map.parquet"),
             index=False,
         )
-        result.clusters.to_parquet(output["clusters"].path, index=False)
+        result.clusters.to_parquet(
+            output_path.with_name("harvard_index_person_deduplication_clusters.parquet"),
+            index=False,
+        )
+        deduplicated_people.to_parquet(output.path, index=False)
 
         duplicates_removed = len(people) - len(deduplicated_people)
         logger.info(
@@ -132,7 +129,7 @@ class HarvardIndexPeopleBuildTask(BaseTask):
         logger.info(
             "Wrote %s deduplicated Harvard Index people to %s",
             len(deduplicated_people),
-            output["people"].path,
+            output.path,
         )
 
 
