@@ -18,7 +18,7 @@ HARVARD_COLLECTORS_CSV = (
     b"5,Brach,A. R. Brach,\"Brach, Anthony Robert\",Brach,1963-01-01,,1963,,"
     b"False,,\"{'US'}\",\"{'SYRF'}\",\"['uuid-1']\",Person,"
     b"https://example.org/5\n"
-    b"6,Brach,A. Brach,\"Brach, Anthony\",Brach,1963-01-01,,1963,,"
+    b"6,Brach,A. R. Brach,\"Brach, Anthony\",Brach,1963-01-01,,1963,,"
     b"False,,\"{'US'}\",\"{'SYRF'}\",\"['uuid-2']\",Person,"
     b"https://example.org/6\n"
 )

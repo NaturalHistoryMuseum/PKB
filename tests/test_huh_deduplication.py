@@ -27,9 +27,9 @@ def test_huh_deduplicator_clusters_matching_surname_initials_and_support():
                 "pkbPersonKey": "harvard_index:6",
                 "source": "harvard_index",
                 "harvardIndexID": "6",
-                "name": "A. Brach",
+                "name": "A. R. Brach",
                 "fullName": "Brach, Anthony",
-                "standardName": "A. Brach",
+                "standardName": "A. R. Brach",
                 "birthYear": "1963",
                 "deathYear": None,
                 "dateOfBirth": "1963-01-01",
@@ -89,3 +89,42 @@ def test_huh_deduplicator_does_not_cluster_conflicting_dates():
     assert len(result.people) == 2
     assert result.clusters.empty
     assert not result.pair_features.iloc[0]["likelyDuplicate"]
+
+
+def test_huh_deduplicator_blocks_on_full_initials():
+    people = pd.DataFrame(
+        [
+            {
+                "pkbPersonKey": "harvard_index:5",
+                "source": "harvard_index",
+                "harvardIndexID": "5",
+                "name": "A. R. Brach",
+                "birthYear": "1963",
+                "deathYear": None,
+                "dateOfBirth": None,
+                "dateOfDeath": None,
+                "geographyISO": ["US"],
+                "herbariaCode": ["SYRF"],
+                "institutionUUID": [],
+            },
+            {
+                "pkbPersonKey": "harvard_index:6",
+                "source": "harvard_index",
+                "harvardIndexID": "6",
+                "name": "A. Brach",
+                "birthYear": "1963",
+                "deathYear": None,
+                "dateOfBirth": None,
+                "dateOfDeath": None,
+                "geographyISO": ["US"],
+                "herbariaCode": ["SYRF"],
+                "institutionUUID": [],
+            },
+        ]
+    )
+
+    result = HUHPersonDeduplicator().deduplicate(people)
+
+    assert len(result.people) == 2
+    assert result.clusters.empty
+    assert result.pair_features.empty

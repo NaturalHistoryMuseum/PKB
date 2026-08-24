@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from itertools import combinations
 
 import networkx as nx
 import pandas as pd
+import recordlinkage
 
 from pkb.models.people.names import parse_person_name
 
@@ -60,7 +60,6 @@ class HUHPersonDeduplicator:
         work["normalisedName"] = parsed_names.apply(
             lambda name: name.normalised if name else None
         )
-        work["firstInitial"] = work["initialsText"].str[:1]
         work["birthYearClean"] = work["birthYear"].combine_first(
             work["dateOfBirth"]
         ).apply(_clean_year)
@@ -70,33 +69,155 @@ class HUHPersonDeduplicator:
         work["candidateBlock"] = (
             work["surname"].fillna("")
             + "|"
-            + work["firstInitial"].fillna("")
+            + work["initialsText"].fillna("")
         )
         work.loc[work["candidateBlock"].eq("|"), "candidateBlock"] = None
+        block_counts = work["candidateBlock"].value_counts(dropna=True)
+        work["candidateBlock"] = work["candidateBlock"].where(
+            work["candidateBlock"].map(block_counts).le(self.max_block_size)
+        )
         work["informationScore"] = work.apply(_information_score, axis=1)
         return work
 
     def _pair_features(self, work: pd.DataFrame) -> pd.DataFrame:
-        rows = []
-        blocked = work[work["candidateBlock"].notna()]
+        indexed = work.set_index("harvardIndexID", drop=False)
+        indexer = recordlinkage.Index()
+        indexer.block("candidateBlock")
+        candidate_links = indexer.index(indexed)
 
-        for block_value, group in blocked.groupby("candidateBlock", dropna=True):
-            if len(group) < 2 or len(group) > self.max_block_size:
-                continue
+        if len(candidate_links) == 0:
+            return self._empty_pair_features()
 
-            for left, right in combinations(group.to_dict("records"), 2):
-                features = self._compare_pair(left, right)
-                rows.append(
-                    {
-                        "leftHarvardIndexID": left["harvardIndexID"],
-                        "rightHarvardIndexID": right["harvardIndexID"],
-                        "blockValue": block_value,
-                        **features,
-                    }
-                )
+        compare = recordlinkage.Compare()
+        compare.exact("surname", "surname", label="sameSurname")
+        compare.exact("initialsText", "initialsText", label="sameInitials")
+        compare.exact("birthYearClean", "birthYearClean", label="sameBirthYear")
+        compare.exact("deathYearClean", "deathYearClean", label="sameDeathYear")
+        features = compare.compute(candidate_links, indexed)
 
+        pairs = candidate_links.to_frame(index=False)
+        pairs.columns = ["leftHarvardIndexID", "rightHarvardIndexID"]
+        left = (
+            indexed.loc[pairs["leftHarvardIndexID"]]
+            .reset_index(drop=True)
+            .drop(columns=["harvardIndexID"], errors="ignore")
+            .add_suffix("Left")
+        )
+        right = (
+            indexed.loc[pairs["rightHarvardIndexID"]]
+            .reset_index(drop=True)
+            .drop(columns=["harvardIndexID"], errors="ignore")
+            .add_suffix("Right")
+        )
+        pair_features = pd.concat(
+            [
+                pairs.reset_index(drop=True),
+                left,
+                right,
+                features.reset_index(drop=True),
+            ],
+            axis=1,
+        )
+        pair_features["blockValue"] = pair_features["candidateBlockLeft"]
+        pair_features["leftName"] = pair_features["nameLeft"]
+        pair_features["rightName"] = pair_features["nameRight"]
+        pair_features["birthYearMatches"] = (
+            pair_features["sameBirthYear"].eq(1)
+            & pair_features["birthYearCleanLeft"].notna()
+            & pair_features["birthYearCleanRight"].notna()
+        )
+        pair_features["deathYearMatches"] = (
+            pair_features["sameDeathYear"].eq(1)
+            & pair_features["deathYearCleanLeft"].notna()
+            & pair_features["deathYearCleanRight"].notna()
+        )
+        pair_features["herbariaMatches"] = [
+            _lists_match(left_value, right_value)
+            for left_value, right_value in zip(
+                pair_features["herbariaCodeLeft"],
+                pair_features["herbariaCodeRight"],
+            )
+        ]
+        pair_features["geographyMatches"] = [
+            _lists_match(left_value, right_value)
+            for left_value, right_value in zip(
+                pair_features["geographyISOLeft"],
+                pair_features["geographyISORight"],
+            )
+        ]
+        pair_features["birthYearsCompatible"] = [
+            _values_compatible(left_value, right_value)
+            for left_value, right_value in zip(
+                pair_features["birthYearCleanLeft"],
+                pair_features["birthYearCleanRight"],
+            )
+        ]
+        pair_features["deathYearsCompatible"] = [
+            _values_compatible(left_value, right_value)
+            for left_value, right_value in zip(
+                pair_features["deathYearCleanLeft"],
+                pair_features["deathYearCleanRight"],
+            )
+        ]
+        pair_features["herbariaCompatible"] = [
+            _lists_compatible(left_value, right_value)
+            for left_value, right_value in zip(
+                pair_features["herbariaCodeLeft"],
+                pair_features["herbariaCodeRight"],
+            )
+        ]
+        pair_features["geographyCompatible"] = [
+            _lists_compatible(left_value, right_value)
+            for left_value, right_value in zip(
+                pair_features["geographyISOLeft"],
+                pair_features["geographyISORight"],
+            )
+        ]
+        pair_features["hasSupportingMatch"] = (
+            pair_features["birthYearMatches"]
+            | pair_features["deathYearMatches"]
+            | pair_features["herbariaMatches"]
+            | pair_features["geographyMatches"]
+        )
+        pair_features["noSupportingConflict"] = (
+            pair_features["birthYearsCompatible"]
+            & pair_features["deathYearsCompatible"]
+            & pair_features["herbariaCompatible"]
+            & pair_features["geographyCompatible"]
+        )
+        pair_features["likelyDuplicate"] = (
+            pair_features["sameSurname"].eq(1)
+            & pair_features["sameInitials"].eq(1)
+            & pair_features["hasSupportingMatch"]
+            & pair_features["noSupportingConflict"]
+        )
+
+        return pair_features[
+            [
+                "leftHarvardIndexID",
+                "rightHarvardIndexID",
+                "blockValue",
+                "leftName",
+                "rightName",
+                "sameSurname",
+                "sameInitials",
+                "birthYearMatches",
+                "deathYearMatches",
+                "herbariaMatches",
+                "geographyMatches",
+                "birthYearsCompatible",
+                "deathYearsCompatible",
+                "herbariaCompatible",
+                "geographyCompatible",
+                "hasSupportingMatch",
+                "noSupportingConflict",
+                "likelyDuplicate",
+            ]
+        ]
+
+    def _empty_pair_features(self) -> pd.DataFrame:
         return pd.DataFrame(
-            rows,
+            [],
             columns=[
                 "leftHarvardIndexID",
                 "rightHarvardIndexID",
@@ -104,7 +225,7 @@ class HUHPersonDeduplicator:
                 "leftName",
                 "rightName",
                 "sameSurname",
-                "initialsCompatible",
+                "sameInitials",
                 "birthYearMatches",
                 "deathYearMatches",
                 "herbariaMatches",
@@ -118,71 +239,6 @@ class HUHPersonDeduplicator:
                 "likelyDuplicate",
             ],
         )
-
-    def _compare_pair(self, left: dict, right: dict) -> dict:
-        birth_year_matches = _values_match(
-            left["birthYearClean"],
-            right["birthYearClean"],
-        )
-        death_year_matches = _values_match(
-            left["deathYearClean"],
-            right["deathYearClean"],
-        )
-        herbaria_matches = _lists_match(left["herbariaCode"], right["herbariaCode"])
-        geography_matches = _lists_match(left["geographyISO"], right["geographyISO"])
-
-        no_supporting_conflict = (
-            _values_compatible(left["birthYearClean"], right["birthYearClean"])
-            and _values_compatible(left["deathYearClean"], right["deathYearClean"])
-            and _lists_compatible(left["herbariaCode"], right["herbariaCode"])
-            and _lists_compatible(left["geographyISO"], right["geographyISO"])
-        )
-        has_supporting_match = (
-            birth_year_matches
-            or death_year_matches
-            or herbaria_matches
-            or geography_matches
-        )
-        same_surname = bool(left["surname"] and left["surname"] == right["surname"])
-        initials_compatible = _initials_compatible(
-            left["initialsText"],
-            right["initialsText"],
-        )
-
-        return {
-            "leftName": left["name"],
-            "rightName": right["name"],
-            "sameSurname": same_surname,
-            "initialsCompatible": initials_compatible,
-            "birthYearMatches": birth_year_matches,
-            "deathYearMatches": death_year_matches,
-            "herbariaMatches": herbaria_matches,
-            "geographyMatches": geography_matches,
-            "birthYearsCompatible": _values_compatible(
-                left["birthYearClean"],
-                right["birthYearClean"],
-            ),
-            "deathYearsCompatible": _values_compatible(
-                left["deathYearClean"],
-                right["deathYearClean"],
-            ),
-            "herbariaCompatible": _lists_compatible(
-                left["herbariaCode"],
-                right["herbariaCode"],
-            ),
-            "geographyCompatible": _lists_compatible(
-                left["geographyISO"],
-                right["geographyISO"],
-            ),
-            "hasSupportingMatch": has_supporting_match,
-            "noSupportingConflict": no_supporting_conflict,
-            "likelyDuplicate": (
-                same_surname
-                and initials_compatible
-                and has_supporting_match
-                and no_supporting_conflict
-            ),
-        }
 
     def _clusters(self, work: pd.DataFrame, duplicate_pairs: pd.DataFrame) -> pd.DataFrame:
         graph = nx.Graph()
