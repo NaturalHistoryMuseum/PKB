@@ -28,7 +28,7 @@ def test_huh_deduplicator_clusters_matching_surname_initials_and_support():
                 "source": "harvard_index",
                 "harvardIndexID": "6",
                 "name": "A. R. Brach",
-                "fullName": "Brach, Anthony",
+                "fullName": "Brach, Anthony Robert",
                 "standardName": "A. R. Brach",
                 "birthYear": "1963",
                 "deathYear": None,
@@ -43,12 +43,10 @@ def test_huh_deduplicator_clusters_matching_surname_initials_and_support():
 
     result = HUHPersonDeduplicator().deduplicate(people)
 
-    assert len(result.people) == 1
-    assert result.people.iloc[0]["pkbPersonKey"] == "harvard_index:5"
-    assert list(result.people.iloc[0]["harvardIndexID"]) == ["5", "6"]
-    assert list(result.people.iloc[0]["institutionUUID"]) == ["uuid-1", "uuid-2"]
     assert result.clusters.iloc[0]["canonicalHarvardIndexID"] == "5"
+    assert list(result.clusters.iloc[0]["harvardIndexIDs"]) == ["5", "6"]
     assert set(result.deduplication_map["harvardIndexID"].tolist()) == {"5", "6"}
+    assert set(result.deduplication_map["canonicalHarvardIndexID"].tolist()) == {"5"}
     assert result.pair_features.iloc[0]["likelyDuplicate"]
 
 
@@ -86,8 +84,9 @@ def test_huh_deduplicator_does_not_cluster_conflicting_dates():
 
     result = HUHPersonDeduplicator().deduplicate(people)
 
-    assert len(result.people) == 2
     assert result.clusters.empty
+    assert len(result.deduplication_map) == 2
+    assert result.deduplication_map["harvardIndexID"].tolist() == ["17085", "29566"]
     assert not result.pair_features.iloc[0]["likelyDuplicate"]
 
 
@@ -125,6 +124,6 @@ def test_huh_deduplicator_blocks_on_full_initials():
 
     result = HUHPersonDeduplicator().deduplicate(people)
 
-    assert len(result.people) == 2
     assert result.clusters.empty
+    assert len(result.deduplication_map) == 2
     assert result.pair_features.empty

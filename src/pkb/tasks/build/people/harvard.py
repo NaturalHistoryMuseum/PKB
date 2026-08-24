@@ -107,9 +107,13 @@ class HarvardIndexPeopleBuildTask(BaseTask):
 
         people = pd.DataFrame(records)
         result = HUHPersonDeduplicator().deduplicate(people)
+        deduplicated_people = _deduplicated_people(
+            people,
+            result.deduplication_map,
+        )
         output = self.output()
 
-        result.people.to_parquet(output["people"].path, index=False)
+        deduplicated_people.to_parquet(output["people"].path, index=False)
         result.deduplication_map.to_parquet(
             output["deduplication_map"].path,
             index=False,
@@ -118,9 +122,53 @@ class HarvardIndexPeopleBuildTask(BaseTask):
 
         logger.info(
             "Wrote %s deduplicated Harvard Index people to %s",
-            len(result.people),
+            len(deduplicated_people),
             output["people"].path,
         )
+
+
+def _deduplicated_people(
+    people: pd.DataFrame,
+    deduplication_map: pd.DataFrame,
+) -> pd.DataFrame:
+    mapped = people.merge(
+        deduplication_map[
+            ["huhClusterID", "harvardIndexID", "canonicalHarvardIndexID"]
+        ],
+        on="harvardIndexID",
+        how="left",
+    )
+    records = []
+
+    for canonical_id, group in mapped.groupby("canonicalHarvardIndexID", sort=True):
+        canonical = group[group["harvardIndexID"].eq(canonical_id)].iloc[0]
+        record = canonical.drop(
+            labels=["huhClusterID", "canonicalHarvardIndexID"],
+            errors="ignore",
+        ).to_dict()
+        harvard_ids = sorted(group["harvardIndexID"].astype(str).tolist())
+
+        record["pkbPersonKey"] = f"harvard_index:{canonical_id}"
+        record["harvardIndexID"] = harvard_ids
+        record["deduplicatedHarvardIndexIDs"] = harvard_ids
+        record["sourceRecordCount"] = len(group)
+
+        for column in ["geographyISO", "herbariaCode", "institutionUUID"]:
+            record[column] = _merge_lists(group[column])
+
+        records.append(record)
+
+    return pd.DataFrame(records)
+
+
+def _merge_lists(values: pd.Series) -> list[str]:
+    merged = []
+    for value in values:
+        if isinstance(value, list):
+            merged.extend(str(item) for item in value if _clean(item))
+        elif _clean(value):
+            merged.append(str(value))
+    return sorted(set(merged))
 
 
 if __name__ == "__main__":
