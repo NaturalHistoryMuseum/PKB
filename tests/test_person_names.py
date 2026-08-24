@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pkb.models.people.names import (
     parse_person_name,
-    parse_person_names,
     person_names_compatible,
     person_names_match_by_given_names,
     person_names_match_by_initials,
@@ -60,28 +59,3 @@ def test_person_names_compatible_with_parenthetical_extra_given_name():
     assert person_names_match_by_given_names(a, b)
     assert person_names_match_by_initials(a, b)
     assert person_names_compatible(a, b)
-
-
-def test_parse_person_names_orders_multiple_names_by_expansion():
-    names = parse_person_names(
-        "[S. R. Clemente y Rubio, S. de Rojas Clemente y Rubio, "
-        "S. de Roxas Clemente y Rubio]"
-    )
-
-    assert len(names) == 3
-    assert names[0].verbatim == "S. de Rojas Clemente y Rubio"
-    assert names[0].surname == "de rojas clemente y rubio"
-    assert names[0].given_names == ("s",)
-    assert names[0].initials_text == "s"
-    assert names[0].full_name == "s de rojas clemente y rubio"
-
-
-def test_parse_person_name_chooses_most_expansive_name_variant():
-    name = parse_person_name(
-        "[S. R. Clemente y Rubio, S. de Rojas Clemente y Rubio, "
-        "S. de Roxas Clemente y Rubio]"
-    )
-
-    assert name is not None
-    assert name.verbatim == "S. de Rojas Clemente y Rubio"
-    assert name.surname == "de rojas clemente y rubio"

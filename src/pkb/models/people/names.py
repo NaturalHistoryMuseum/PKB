@@ -7,21 +7,6 @@ from dataclasses import dataclass
 from nameparser import HumanName
 
 
-PARTICLE_WORDS = {
-    "da",
-    "de",
-    "del",
-    "der",
-    "di",
-    "du",
-    "la",
-    "le",
-    "van",
-    "von",
-    "y",
-}
-
-
 @dataclass(frozen=True)
 class ParsedPersonName:
     verbatim: str
@@ -50,21 +35,10 @@ class ParsedPersonName:
 
 
 def parse_person_name(value) -> ParsedPersonName | None:
-    names = parse_person_names(value)
-    return names[0] if names else None
-
-
-def parse_person_names(value) -> tuple[ParsedPersonName, ...]:
     value = _clean_scalar(value)
     if not value:
-        return ()
-
-    names = [
-        parsed_name
-        for name in _split_name_variants(value)
-        if (parsed_name := _parse_single_person_name(name))
-    ]
-    return tuple(sorted(names, key=_name_expansion_score, reverse=True))
+        return None
+    return _parse_person_name(value)
 
 
 def person_names_match_by_given_names(
@@ -122,7 +96,7 @@ def normalise_person_name_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _parse_single_person_name(value: str) -> ParsedPersonName | None:
+def _parse_person_name(value: str) -> ParsedPersonName | None:
     verbatim = value
     value = _clean_name_for_parsing(value)
     if not value:
@@ -139,7 +113,7 @@ def _parse_single_person_name(value: str) -> ParsedPersonName | None:
                 _normalise_name_part(name.first),
                 *(_normalise_name_part(part) for part in name.middle.split()),
             )
-            if part and part not in PARTICLE_WORDS
+            if part
         )
         surname = _normalise_name_part(name.last)
 
@@ -166,18 +140,6 @@ def _clean_scalar(value) -> str | None:
     return value
 
 
-def _split_name_variants(value: str) -> tuple[str, ...]:
-    value = value.strip()
-    if value.startswith("[") and value.endswith("]"):
-        value = value[1:-1]
-        return tuple(
-            part.strip(" '\"\n\t")
-            for part in re.split(r"\s*,\s*(?=[A-Z]\.\s|[A-Z][a-z])", value)
-            if part.strip(" '\"\n\t")
-        )
-    return (value,)
-
-
 def _clean_name_for_parsing(value: str) -> str:
     value = strip_accents(value).replace("*", " ")
     value = re.sub(r"\(([^)]+)\)", " ", value)
@@ -189,11 +151,3 @@ def _normalise_name_part(value: str | None) -> str | None:
         return None
     value = normalise_person_name_text(value)
     return value or None
-
-
-def _name_expansion_score(name: ParsedPersonName) -> tuple[int, int]:
-    tokens = tuple(token for token in name.normalised.split() if len(token) > 1)
-    return (
-        len(tokens),
-        sum(len(token) for token in tokens),
-    )
