@@ -143,3 +143,57 @@ def test_harvard_index_people_build_maps_archived_collectors(monkeypatch, tmp_pa
     assert list(row["institutionUUID"]) == ["uuid-1", "uuid-2"]
     assert set(deduplication_map["harvardIndexID"].tolist()) == {"5", "6"}
     assert clusters.iloc[0]["canonicalHarvardIndexID"] == "5"
+
+
+def test_harvard_index_people_build_logs_duplicate_count(
+    caplog,
+    monkeypatch,
+    tmp_path,
+):
+    import pkb.tasks.build.people.harvard as build_module
+
+    monkeypatch.setattr(
+        HarvardIndexPeopleBuildTask,
+        "input",
+        lambda self: luigi.LocalTarget(tmp_path / "collectors.dataset-version.json"),
+    )
+    monkeypatch.setattr(
+        HarvardIndexPeopleBuildTask,
+        "output",
+        lambda self: {
+            "people": luigi.LocalTarget(tmp_path / "harvard_index_people.parquet"),
+            "deduplication_map": luigi.LocalTarget(
+                tmp_path / "harvard_index_person_deduplication_map.parquet"
+            ),
+            "clusters": luigi.LocalTarget(
+                tmp_path / "harvard_index_person_deduplication_clusters.parquet"
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        build_module,
+        "read_dataset_version",
+        lambda path: DatasetVersion(
+            dataset="harvard_index_collectors",
+            retrieved_at=datetime(2026, 8, 18, 12, 0, tzinfo=UTC),
+            source_url="archived-local-file:data/assets/harvard-index/huh-collectors.csv",
+            sha256="sha",
+            size=len(HARVARD_COLLECTORS_CSV),
+            s3_bucket="pkb-source-data",
+            s3_key="harvard-index/people/collectors/source.csv",
+            s3_version_id="version-123",
+        ),
+    )
+    monkeypatch.setattr(build_module, "get_s3_client", lambda: "s3-client")
+    monkeypatch.setattr(
+        build_module,
+        "fetch_source_dataset",
+        lambda **kwargs: HARVARD_COLLECTORS_CSV,
+    )
+
+    HarvardIndexPeopleBuildTask().run()
+
+    assert (
+        "Harvard Index deduplication: 2 source records -> 1 people "
+        "(1 duplicates removed across 1 clusters)"
+    ) in caplog.text

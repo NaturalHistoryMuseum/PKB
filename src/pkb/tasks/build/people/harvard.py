@@ -120,6 +120,15 @@ class HarvardIndexPeopleBuildTask(BaseTask):
         )
         result.clusters.to_parquet(output["clusters"].path, index=False)
 
+        duplicates_removed = len(people) - len(deduplicated_people)
+        logger.info(
+            "Harvard Index deduplication: %s source records -> %s people "
+            "(%s duplicates removed across %s clusters)",
+            len(people),
+            len(deduplicated_people),
+            duplicates_removed,
+            len(result.clusters),
+        )
         logger.info(
             "Wrote %s deduplicated Harvard Index people to %s",
             len(deduplicated_people),
