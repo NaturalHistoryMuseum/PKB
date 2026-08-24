@@ -7,7 +7,7 @@ from pkb.config import settings
 from pkb.models.people import PersonAggregator
 from pkb.tasks.base import BaseTask
 from pkb.tasks.build.people.bionomia import BionomiaPeopleTask
-from pkb.tasks.build.people.harvard import HarvardIndexPeopleTask
+from pkb.tasks.build.people.harvard import HarvardIndexPeopleBuildTask
 from pkb.tasks.build.people.wikidata import WikiDataPeopleTask
 
 
@@ -18,7 +18,7 @@ class PeopleTask(BaseTask):
         return {
             "wikidata": WikiDataPeopleTask(),
             "bionomia": BionomiaPeopleTask(),
-            "harvard_index": HarvardIndexPeopleTask(),
+            "harvard_index": HarvardIndexPeopleBuildTask(),
             # "ipni_authors": IPNIAuthorSourceTask(),
         }
 
@@ -34,7 +34,7 @@ class PeopleTask(BaseTask):
     def run(self):
         source_people = pd.concat(
             [
-                pd.read_parquet(target.path)
+                pd.read_parquet(_people_target(target).path)
                 for target in self.input().values()
             ],
             ignore_index=True,
@@ -48,6 +48,12 @@ class PeopleTask(BaseTask):
             output["source_links"].path,
             index=False,
         )
+
+
+def _people_target(target):
+    if isinstance(target, dict):
+        return target["people"]
+    return target
 
 
 if __name__ == "__main__":

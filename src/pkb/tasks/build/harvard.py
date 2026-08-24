@@ -1,10 +1,7 @@
-"""Compatibility imports for Harvard Index people build tasks.
+"""Harvard Index people build task imports."""
 
-New code should import from ``pkb.tasks.build.people.harvard``.
-"""
-
-from pkb.tasks.build.people.harvard import HarvardIndexPeopleTask
+from pkb.tasks.build.people.harvard import HarvardIndexPeopleBuildTask
 
 __all__ = [
-    "HarvardIndexPeopleTask",
+    "HarvardIndexPeopleBuildTask",
 ]

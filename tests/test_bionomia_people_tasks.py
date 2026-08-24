@@ -165,7 +165,7 @@ def test_people_task_aggregates_people_and_writes_source_links(monkeypatch, tmp_
             {
                 "pkbPersonKey": "harvard_index:5",
                 "source": "harvard_index",
-                "harvardIndexID": "5",
+                "harvardIndexID": ["5", "6"],
                 "name": "Jane A. Collector",
             }
         ]
@@ -182,9 +182,17 @@ def test_people_task_aggregates_people_and_writes_source_links(monkeypatch, tmp_
         lambda self: luigi.LocalTarget(bionomia_path),
     )
     monkeypatch.setattr(
-        people_module.HarvardIndexPeopleTask,
+        people_module.HarvardIndexPeopleBuildTask,
         "output",
-        lambda self: luigi.LocalTarget(harvard_path),
+        lambda self: {
+            "people": luigi.LocalTarget(harvard_path),
+            "deduplication_map": luigi.LocalTarget(
+                tmp_path / "harvard_index_person_deduplication_map.parquet"
+            ),
+            "clusters": luigi.LocalTarget(
+                tmp_path / "harvard_index_person_deduplication_clusters.parquet"
+            ),
+        },
     )
     monkeypatch.setattr(
         PeopleTask,
@@ -204,6 +212,7 @@ def test_people_task_aggregates_people_and_writes_source_links(monkeypatch, tmp_
     assert len(people) == 1
     assert people.iloc[0]["name"] == "Jane A. Collector"
     assert people.iloc[0]["sourceCount"] == 3
+    assert list(people.iloc[0]["harvardIndexIDs"]) == ["5", "6"]
     assert sorted(source_links["sourcePersonKey"].tolist()) == [
         "bionomia:0000-0002",
         "harvard_index:5",

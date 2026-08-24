@@ -7,6 +7,7 @@ import luigi
 import pandas as pd
 
 from pkb.config import logger, settings
+from pkb.models.people import HUHPersonDeduplicator
 from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
 from pkb.tasks.base import BaseTask
 from pkb.tasks.sources.people.harvard import HarvardIndexCollectorsSourceTask
@@ -48,8 +49,8 @@ def _name(row) -> str | None:
     )
 
 
-class HarvardIndexPeopleTask(BaseTask):
-    """Build People-domain rows from the archived Harvard Index scrape."""
+class HarvardIndexPeopleBuildTask(BaseTask):
+    """Build deduplicated People-domain rows from the archived Harvard Index scrape."""
 
     source_name = "harvard_index"
 
@@ -57,7 +58,15 @@ class HarvardIndexPeopleTask(BaseTask):
         return HarvardIndexCollectorsSourceTask()
 
     def output(self):
-        return luigi.LocalTarget(PEOPLE_DIR / "harvard_index_people.parquet")
+        return {
+            "people": luigi.LocalTarget(PEOPLE_DIR / "harvard_index_people.parquet"),
+            "deduplication_map": luigi.LocalTarget(
+                PEOPLE_DIR / "harvard_index_person_deduplication_map.parquet"
+            ),
+            "clusters": luigi.LocalTarget(
+                PEOPLE_DIR / "harvard_index_person_deduplication_clusters.parquet"
+            ),
+        }
 
     def run(self):
         dataset_version = read_dataset_version(self.input().path)
@@ -97,14 +106,22 @@ class HarvardIndexPeopleTask(BaseTask):
             )
 
         people = pd.DataFrame(records)
-        people.to_parquet(self.output().path, index=False)
+        result = HUHPersonDeduplicator().deduplicate(people)
+        output = self.output()
+
+        result.people.to_parquet(output["people"].path, index=False)
+        result.deduplication_map.to_parquet(
+            output["deduplication_map"].path,
+            index=False,
+        )
+        result.clusters.to_parquet(output["clusters"].path, index=False)
 
         logger.info(
-            "Wrote %s Harvard Index people to %s",
-            len(people),
-            self.output().path,
+            "Wrote %s deduplicated Harvard Index people to %s",
+            len(result.people),
+            output["people"].path,
         )
 
 
 if __name__ == "__main__":
-    luigi.build([HarvardIndexPeopleTask()], local_scheduler=True)
+    luigi.build([HarvardIndexPeopleBuildTask()], local_scheduler=True)

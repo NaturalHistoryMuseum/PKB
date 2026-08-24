@@ -55,8 +55,10 @@ pkb.tasks.build.institutions.institutions.InstitutionsTask
 pkb.tasks.build.people.bionomia.BionomiaPeopleTask
   -> data/intermediate/people/bionomia_people.parquet
 
-pkb.tasks.build.people.harvard.HarvardIndexPeopleTask
+pkb.tasks.build.people.harvard.HarvardIndexPeopleBuildTask
   -> data/intermediate/people/harvard_index_people.parquet
+  -> data/intermediate/people/harvard_index_person_deduplication_map.parquet
+  -> data/intermediate/people/harvard_index_person_deduplication_clusters.parquet
 ```
 
 Wikidata domains should reuse the shared source task pattern:

@@ -7,7 +7,7 @@ import luigi
 import pandas as pd
 
 from pkb.storage import DatasetVersion
-from pkb.tasks.build.people.harvard import HarvardIndexPeopleTask
+from pkb.tasks.build.people.harvard import HarvardIndexPeopleBuildTask
 from pkb.tasks.sources.people.harvard import HarvardIndexCollectorsSourceTask
 
 
@@ -18,6 +18,9 @@ HARVARD_COLLECTORS_CSV = (
     b"5,Brach,A. R. Brach,\"Brach, Anthony Robert\",Brach,1963-01-01,,1963,,"
     b"False,,\"{'US'}\",\"{'SYRF'}\",\"['uuid-1']\",Person,"
     b"https://example.org/5\n"
+    b"6,Brach,A. Brach,\"Brach, Anthony\",Brach,1963-01-01,,1963,,"
+    b"False,,\"{'US'}\",\"{'SYRF'}\",\"['uuid-2']\",Person,"
+    b"https://example.org/6\n"
 )
 
 
@@ -80,14 +83,22 @@ def test_harvard_index_people_build_maps_archived_collectors(monkeypatch, tmp_pa
     import pkb.tasks.build.people.harvard as build_module
 
     monkeypatch.setattr(
-        HarvardIndexPeopleTask,
+        HarvardIndexPeopleBuildTask,
         "input",
         lambda self: luigi.LocalTarget(tmp_path / "collectors.dataset-version.json"),
     )
     monkeypatch.setattr(
-        HarvardIndexPeopleTask,
+        HarvardIndexPeopleBuildTask,
         "output",
-        lambda self: luigi.LocalTarget(tmp_path / "harvard_index_people.parquet"),
+        lambda self: {
+            "people": luigi.LocalTarget(tmp_path / "harvard_index_people.parquet"),
+            "deduplication_map": luigi.LocalTarget(
+                tmp_path / "harvard_index_person_deduplication_map.parquet"
+            ),
+            "clusters": luigi.LocalTarget(
+                tmp_path / "harvard_index_person_deduplication_clusters.parquet"
+            ),
+        },
     )
     monkeypatch.setattr(
         build_module,
@@ -110,18 +121,25 @@ def test_harvard_index_people_build_maps_archived_collectors(monkeypatch, tmp_pa
         lambda **kwargs: HARVARD_COLLECTORS_CSV,
     )
 
-    task = HarvardIndexPeopleTask()
+    task = HarvardIndexPeopleBuildTask()
     task.run()
 
-    df = pd.read_parquet(task.output().path)
+    output = task.output()
+    df = pd.read_parquet(output["people"].path)
+    deduplication_map = pd.read_parquet(output["deduplication_map"].path)
+    clusters = pd.read_parquet(output["clusters"].path)
     row = df.iloc[0].to_dict()
 
     assert row["pkbPersonKey"] == "harvard_index:5"
     assert row["source"] == "harvard_index"
-    assert row["harvardIndexID"] == "5"
+    assert list(row["harvardIndexID"]) == ["5", "6"]
+    assert list(row["deduplicatedHarvardIndexIDs"]) == ["5", "6"]
+    assert row["sourceRecordCount"] == 2
     assert row["name"] == "A. R. Brach"
     assert row["fullName"] == "Brach, Anthony Robert"
     assert row["authorAbbreviation"] == "Brach"
     assert list(row["geographyISO"]) == ["US"]
     assert list(row["herbariaCode"]) == ["SYRF"]
-    assert list(row["institutionUUID"]) == ["uuid-1"]
+    assert list(row["institutionUUID"]) == ["uuid-1", "uuid-2"]
+    assert set(deduplication_map["harvardIndexID"].tolist()) == {"5", "6"}
+    assert clusters.iloc[0]["canonicalHarvardIndexID"] == "5"

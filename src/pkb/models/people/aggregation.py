@@ -63,7 +63,10 @@ class PersonAggregator:
             if column not in source_people.columns:
                 continue
 
-            linked = source_people[source_people[column].apply(_has_value)]
+            linked = source_people[
+                ["sourcePersonKey", column]
+            ].explode(column)
+            linked = linked[linked[column].apply(_has_value)]
             for _, group in linked.groupby(column, dropna=True):
                 keys = group["sourcePersonKey"].drop_duplicates().tolist()
                 if len(keys) < 2:
@@ -150,7 +153,7 @@ def _unique_values(group: pd.DataFrame, column: str) -> list[str]:
 
     values = []
     for value in group[column].dropna():
-        if isinstance(value, list):
+        if _is_collection_value(value):
             values.extend(value)
         else:
             values.append(value)
@@ -161,10 +164,17 @@ def _unique_values(group: pd.DataFrame, column: str) -> list[str]:
 def _has_value(value) -> bool:
     if value is None:
         return False
-    if isinstance(value, list):
+    if _is_collection_value(value):
         return any(_has_value(item) for item in value)
     if pd.isna(value):
         return False
     if isinstance(value, str):
         return bool(value.strip()) and value != "nan"
     return True
+
+
+def _is_collection_value(value) -> bool:
+    return isinstance(value, (list, tuple, set)) or (
+        hasattr(value, "tolist")
+        and not isinstance(value, (str, bytes))
+    )
