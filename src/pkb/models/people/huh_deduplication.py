@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import networkx as nx
 import pandas as pd
 import recordlinkage
+from recordlinkage.compare import VariableA, VariableB
 
 from pkb.models.people.names import parse_person_name
 
@@ -77,55 +78,27 @@ def _pair_features(work: pd.DataFrame) -> pd.DataFrame:
         return _empty_pair_features()
 
     compare = recordlinkage.Compare()
+    compare.add(VariableA("candidateBlock", label="blockValue"))
+    compare.add(VariableA("dedupeName", label="leftName"))
+    compare.add(VariableB("dedupeName", label="rightName"))
     compare.exact("surname", "surname", label="sameSurname")
     compare.exact("initialsText", "initialsText", label="sameInitials")
-    compare.exact("birthYearClean", "birthYearClean", label="sameBirthYear")
-    compare.exact("deathYearClean", "deathYearClean", label="sameDeathYear")
-    features = compare.compute(candidate_links, indexed).reset_index(drop=True)
+    for label, column, comparator in _HUH_COMPARE_FEATURES:
+        compare.compare_vectorized(
+            _compare_pairs,
+            column,
+            column,
+            comparator,
+            label=label,
+        )
 
-    pairs = candidate_links.to_frame(index=False)
-    pairs.columns = ["leftHarvardIndexID", "rightHarvardIndexID"]
-    left = indexed.loc[pairs["leftHarvardIndexID"]].reset_index(drop=True)
-    right = indexed.loc[pairs["rightHarvardIndexID"]].reset_index(drop=True)
-
-    pair_features = pd.concat([pairs.reset_index(drop=True), features], axis=1)
-    pair_features["blockValue"] = left["candidateBlock"]
-    pair_features["leftName"] = left["dedupeName"]
-    pair_features["rightName"] = right["dedupeName"]
-    pair_features["birthYearMatches"] = (
-        pair_features["sameBirthYear"].eq(1)
-        & left["birthYearClean"].notna()
-        & right["birthYearClean"].notna()
+    pair_features = compare.compute(candidate_links, indexed).reset_index()
+    pair_features = pair_features.rename(
+        columns={
+            pair_features.columns[0]: "leftHarvardIndexID",
+            pair_features.columns[1]: "rightHarvardIndexID",
+        }
     )
-    pair_features["deathYearMatches"] = (
-        pair_features["sameDeathYear"].eq(1)
-        & left["deathYearClean"].notna()
-        & right["deathYearClean"].notna()
-    )
-    pair_features["herbariaMatches"] = [
-        _lists_match(a, b)
-        for a, b in zip(left["herbariaCode"], right["herbariaCode"])
-    ]
-    pair_features["geographyMatches"] = [
-        _lists_match(a, b)
-        for a, b in zip(left["geographyISO"], right["geographyISO"])
-    ]
-    pair_features["birthYearsCompatible"] = [
-        _values_compatible(a, b)
-        for a, b in zip(left["birthYearClean"], right["birthYearClean"])
-    ]
-    pair_features["deathYearsCompatible"] = [
-        _values_compatible(a, b)
-        for a, b in zip(left["deathYearClean"], right["deathYearClean"])
-    ]
-    pair_features["herbariaCompatible"] = [
-        _lists_compatible(a, b)
-        for a, b in zip(left["herbariaCode"], right["herbariaCode"])
-    ]
-    pair_features["geographyCompatible"] = [
-        _lists_compatible(a, b)
-        for a, b in zip(left["geographyISO"], right["geographyISO"])
-    ]
     pair_features["hasSupportingMatch"] = (
         pair_features["birthYearMatches"]
         | pair_features["deathYearMatches"]
@@ -233,6 +206,10 @@ def _values_compatible(left, right) -> bool:
     return not (_has_value(left) and _has_value(right)) or left == right
 
 
+def _values_match(left, right) -> bool:
+    return _has_value(left) and _has_value(right) and left == right
+
+
 def _lists_match(left, right) -> bool:
     left_values = set(_as_list(left))
     right_values = set(_as_list(right))
@@ -244,6 +221,16 @@ def _lists_compatible(left, right) -> bool:
     right_values = set(_as_list(right))
     return not (left_values and right_values) or bool(
         left_values.intersection(right_values)
+    )
+
+
+def _compare_pairs(left: pd.Series, right: pd.Series, comparator) -> pd.Series:
+    return pd.Series(
+        [
+            comparator(left_value, right_value)
+            for left_value, right_value in zip(left, right)
+        ],
+        index=left.index,
     )
 
 
@@ -271,6 +258,18 @@ def _has_value(value) -> bool:
 
 def _sort_ids(values) -> list[str]:
     return sorted(str(value) for value in values)
+
+
+_HUH_COMPARE_FEATURES = [
+    ("birthYearMatches", "birthYearClean", _values_match),
+    ("deathYearMatches", "deathYearClean", _values_match),
+    ("herbariaMatches", "herbariaCode", _lists_match),
+    ("geographyMatches", "geographyISO", _lists_match),
+    ("birthYearsCompatible", "birthYearClean", _values_compatible),
+    ("deathYearsCompatible", "deathYearClean", _values_compatible),
+    ("herbariaCompatible", "herbariaCode", _lists_compatible),
+    ("geographyCompatible", "geographyISO", _lists_compatible),
+]
 
 
 _PAIR_FEATURE_COLUMNS = [
