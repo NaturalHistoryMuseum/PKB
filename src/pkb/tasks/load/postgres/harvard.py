@@ -9,7 +9,6 @@ from luigi.contrib.postgres import CopyToTable
 
 from pkb.config import logger, settings
 from pkb.models.people import HUHPersonDeduplicator
-from pkb.models.people.names import parse_person_name
 from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
 from pkb.tasks.sources.people.harvard import HarvardIndexCollectorsSourceTask
 from pkb.utils import clean_scalar, parse_literal_collection
@@ -70,7 +69,7 @@ class HarvardIndexPeoplePostgresTask(CopyToTable):
             if (record := _person_record(row))
         )
         result = HUHPersonDeduplicator().deduplicate(people)
-        mapped = people.merge(
+        mapped = result.people.merge(
             result.deduplication_map[
                 ["harvardIndexID", "canonicalHarvardIndexID"]
             ],
@@ -82,11 +81,6 @@ class HarvardIndexPeoplePostgresTask(CopyToTable):
             sort=True,
         ):
             canonical = group[group["harvardIndexID"].eq(canonical_id)].iloc[0]
-            parsed = parse_person_name(
-                canonical["fullName"]
-                or canonical["standardName"]
-                or canonical["name"]
-            )
             values = {
                 column: sorted(
                     {
@@ -105,10 +99,10 @@ class HarvardIndexPeoplePostgresTask(CopyToTable):
                 canonical["name"],
                 canonical["fullName"],
                 canonical["standardName"],
-                parsed.normalised if parsed else None,
-                parsed.surname if parsed else None,
-                parsed.given_names_text if parsed else None,
-                parsed.initials_text if parsed else None,
+                canonical["nameNormalised"],
+                canonical["surname"],
+                canonical["givenNamesText"],
+                canonical["initialsText"],
                 canonical["authorAbbreviation"],
                 canonical["birthYear"],
                 canonical["deathYear"],

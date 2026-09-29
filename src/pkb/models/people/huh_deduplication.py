@@ -6,13 +6,13 @@ from dataclasses import dataclass
 import networkx as nx
 import pandas as pd
 import recordlinkage
-from recordlinkage.compare import VariableA, VariableB
 
 from pkb.models.people.names import parse_person_name
 
 
 @dataclass(frozen=True)
 class HUHDeduplicationResult:
+    people: pd.DataFrame
     deduplication_map: pd.DataFrame
     clusters: pd.DataFrame
     pair_features: pd.DataFrame
@@ -32,6 +32,7 @@ class HUHPersonDeduplicator:
         )
 
         return HUHDeduplicationResult(
+            people=work,
             deduplication_map=_deduplication_map(work, clusters),
             clusters=clusters,
             pair_features=pair_features,
@@ -41,10 +42,19 @@ class HUHPersonDeduplicator:
 def _prepare(people: pd.DataFrame, max_block_size: int) -> pd.DataFrame:
     work = people.copy().reset_index(drop=True)
     work["harvardIndexID"] = work["harvardIndexID"].astype(str)
-    work["dedupeName"] = work.apply(_dedupe_name, axis=1)
-
-    parsed_names = work["dedupeName"].apply(parse_person_name)
+    names = (
+        work["fullName"]
+        .combine_first(work["standardName"])
+        .combine_first(work["name"])
+    )
+    parsed_names = names.apply(parse_person_name)
+    work["nameNormalised"] = parsed_names.apply(
+        lambda name: name.normalised if name else None
+    )
     work["surname"] = parsed_names.apply(lambda name: name.surname if name else None)
+    work["givenNamesText"] = parsed_names.apply(
+        lambda name: name.given_names_text if name else None
+    )
     work["initialsText"] = parsed_names.apply(
         lambda name: name.initials_text if name else None
     )
@@ -78,9 +88,6 @@ def _pair_features(work: pd.DataFrame) -> pd.DataFrame:
         return _empty_pair_features()
 
     compare = recordlinkage.Compare()
-    compare.add(VariableA("candidateBlock", label="blockValue"))
-    compare.add(VariableA("dedupeName", label="leftName"))
-    compare.add(VariableB("dedupeName", label="rightName"))
     compare.exact("surname", "surname", label="sameSurname")
     compare.exact("initialsText", "initialsText", label="sameInitials")
     for label, column, comparator in _HUH_COMPARE_FEATURES:
@@ -186,14 +193,6 @@ def _deduplication_map(work: pd.DataFrame, clusters: pd.DataFrame) -> pd.DataFra
     )
 
 
-def _dedupe_name(row) -> str | None:
-    for column in ["fullName", "standardName", "name"]:
-        value = row.get(column)
-        if _has_value(value):
-            return value
-    return None
-
-
 def _clean_year(value) -> int | None:
     if not _has_value(value):
         return None
@@ -275,9 +274,6 @@ _HUH_COMPARE_FEATURES = [
 _PAIR_FEATURE_COLUMNS = [
     "leftHarvardIndexID",
     "rightHarvardIndexID",
-    "blockValue",
-    "leftName",
-    "rightName",
     "sameSurname",
     "sameInitials",
     "birthYearMatches",
