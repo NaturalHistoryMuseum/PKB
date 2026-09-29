@@ -30,3 +30,6 @@ postgres-down:
 
 postgres-logs:
 	cd docker/postgres && docker compose logs -f
+
+postgres-connect:
+	cd docker/postgres && docker compose exec postgres psql -U pkb -d pkb
