@@ -17,7 +17,7 @@ class BionomiaPeoplePostgresTask(CopyToTable):
     database = settings.postgres_database
     user = settings.postgres_user
     password = settings.postgres_password
-    table = "people_source.bionomia_people"
+    table = "people_bionomia"
 
     columns = [
         ("bionomia_id", "TEXT PRIMARY KEY"),
@@ -96,14 +96,8 @@ class BionomiaPeoplePostgresTask(CopyToTable):
                 version,
             )
 
-    def create_table(self, connection):
-        connection.cursor().execute("CREATE SCHEMA IF NOT EXISTS people_source")
-        super().create_table(connection)
-
     def init_copy(self, connection):
-        cursor = connection.cursor()
-        cursor.execute("CREATE SCHEMA IF NOT EXISTS people_source")
-        cursor.execute(f"TRUNCATE TABLE {self.table}")
+        connection.cursor().execute(f"TRUNCATE TABLE {self.table}")
 
 
 def _clean(value) -> str | None:
