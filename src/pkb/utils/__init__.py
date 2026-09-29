@@ -1,4 +1,9 @@
-from pkb.utils.text import clean_scalar, is_alpha_space, normalize_unicode
+from pkb.utils.text import (
+    clean_scalar,
+    is_alpha_space,
+    normalize_unicode,
+    parse_literal_collection,
+)
 from pkb.utils.geography import country_string_to_iso
 
 __all__ = [
@@ -6,4 +11,5 @@ __all__ = [
     "clean_scalar",
     "is_alpha_space",
     "normalize_unicode",
+    "parse_literal_collection",
 ]

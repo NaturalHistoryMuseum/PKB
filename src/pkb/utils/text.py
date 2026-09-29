@@ -1,3 +1,4 @@
+import ast
 import re
 import unicodedata
 
@@ -19,3 +20,16 @@ def clean_scalar(value) -> str | None:
     if not value or value.lower() in {"nan", "nat", "none", "[none]", "<na>"}:
         return None
     return value
+
+
+def parse_literal_collection(value) -> list[str]:
+    value = clean_scalar(value)
+    if not value:
+        return []
+    try:
+        value = ast.literal_eval(value)
+    except (SyntaxError, ValueError):
+        return [value]
+    if isinstance(value, (list, set, tuple)):
+        return sorted(str(item) for item in value if clean_scalar(item))
+    return [str(value)]

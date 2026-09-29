@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 from io import BytesIO
 from pathlib import Path
 
@@ -12,26 +11,10 @@ from pkb.models.people import HUHPersonDeduplicator
 from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
 from pkb.tasks.base import BaseTask
 from pkb.tasks.sources.people.harvard import HarvardIndexCollectorsSourceTask
-from pkb.utils import clean_scalar
+from pkb.utils import clean_scalar, parse_literal_collection
 
 
 PEOPLE_DIR = settings.intermediate_dir / "people"
-
-
-def _parse_literal_collection(value) -> list[str]:
-    value = clean_scalar(value)
-    if not value:
-        return []
-
-    try:
-        parsed = ast.literal_eval(value)
-    except (SyntaxError, ValueError):
-        return [value]
-
-    if isinstance(parsed, (set, list, tuple)):
-        return sorted(str(item) for item in parsed if clean_scalar(item))
-
-    return [str(parsed)]
 
 
 def _name(row) -> str | None:
@@ -82,9 +65,9 @@ class HarvardIndexPeopleBuildTask(BaseTask):
                     "deathYear": clean_scalar(row.get("deathYear")),
                     "birthYearIsApprox": clean_scalar(row.get("birthYearIsApprox")),
                     "deathYearIsApprox": clean_scalar(row.get("deathYearIsApprox")),
-                    "geographyISO": _parse_literal_collection(row.get("geographyISO")),
-                    "herbariaCode": _parse_literal_collection(row.get("herbariaCode")),
-                    "institutionUUID": _parse_literal_collection(row.get("institutionUUID")),
+                    "geographyISO": parse_literal_collection(row.get("geographyISO")),
+                    "herbariaCode": parse_literal_collection(row.get("herbariaCode")),
+                    "institutionUUID": parse_literal_collection(row.get("institutionUUID")),
                     "agentType": clean_scalar(row.get("Agent type")),
                     "url": clean_scalar(row.get("URL")),
                 }
