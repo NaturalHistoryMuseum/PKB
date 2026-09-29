@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: pkb-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: pkb
+      POSTGRES_USER: pkb
+      POSTGRES_PASSWORD: pkb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

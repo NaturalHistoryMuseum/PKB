@@ -21,3 +21,12 @@ localstack-down:
 
 localstack-logs:
 	cd docker/localstack && docker compose logs -f
+
+postgres-up:
+	cd docker/postgres && docker compose up -d
+
+postgres-down:
+	cd docker/postgres && docker compose down
+
+postgres-logs:
+	cd docker/postgres && docker compose logs -f

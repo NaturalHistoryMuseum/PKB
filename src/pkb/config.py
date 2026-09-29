@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     neo4j_password: str = "password"
     neo4j_database: str = "neo4j" 
 
+    postgres_host: str = "localhost"
+    postgres_port: int = 5433
+    postgres_database: str = "pkb"
+    postgres_user: str = "pkb"
+    postgres_password: str = "pkb"
+
     aws_region: str = Field(
         default="eu-west-2",
         validation_alias=AliasChoices("PKB_AWS_REGION", "AWS_REGION"),
