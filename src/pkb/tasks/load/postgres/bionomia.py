@@ -5,10 +5,11 @@ from io import StringIO
 
 from luigi.contrib.postgres import CopyToTable
 
-from pkb.config import settings
+from pkb.config import logger, settings
 from pkb.models.people.names import parse_person_name
 from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
 from pkb.tasks.sources.people.bionomia import BionomiaPublicProfilesSourceTask
+from pkb.utils import clean_scalar
 
 
 class BionomiaPeoplePostgresTask(CopyToTable):
@@ -56,36 +57,39 @@ class BionomiaPeoplePostgresTask(CopyToTable):
             dataset_version=dataset_version,
         )
         version = dataset_version.s3_version_id or dataset_version.sha256
+        logger.info("Reading Bionomia people from source version %s", version)
+        count = 0
 
         for row in csv.DictReader(StringIO(data.decode("utf-8-sig"))):
-            orcid = _clean(row.get("ORCID"))
-            url = _clean(row.get("URL"))
+            orcid = clean_scalar(row.get("ORCID"))
+            url = clean_scalar(row.get("URL"))
             bionomia_id = orcid or (url.rstrip("/").rsplit("/", 1)[-1] if url else None)
             if not bionomia_id:
                 continue
 
-            name = _clean(row.get("LabelName")) or " ".join(
+            name = clean_scalar(row.get("LabelName")) or " ".join(
                 filter(
                     None,
                     [
-                        _clean(row.get("Given")),
-                        _clean(row.get("Particle")),
-                        _clean(row.get("Family")),
+                        clean_scalar(row.get("Given")),
+                        clean_scalar(row.get("Particle")),
+                        clean_scalar(row.get("Family")),
                     ],
                 )
             )
             parsed = parse_person_name(name)
 
+            count += 1
             yield (
                 bionomia_id,
-                _clean(row.get("Family")),
-                _clean(row.get("Given")),
-                _clean(row.get("Particle")),
-                _clean(row.get("OtherNames")),
-                _clean(row.get("LabelName")),
-                _clean(row.get("Country")),
-                _clean(row.get("Keywords")),
-                _clean(row.get("wikidata")),
+                clean_scalar(row.get("Family")),
+                clean_scalar(row.get("Given")),
+                clean_scalar(row.get("Particle")),
+                clean_scalar(row.get("OtherNames")),
+                clean_scalar(row.get("LabelName")),
+                clean_scalar(row.get("Country")),
+                clean_scalar(row.get("Keywords")),
+                clean_scalar(row.get("wikidata")),
                 orcid,
                 url,
                 name or None,
@@ -96,10 +100,7 @@ class BionomiaPeoplePostgresTask(CopyToTable):
                 version,
             )
 
+        logger.info("Prepared %s Bionomia people for %s", count, self.table)
+
     def init_copy(self, connection):
         connection.cursor().execute(f"TRUNCATE TABLE {self.table}")
-
-
-def _clean(value) -> str | None:
-    value = str(value).strip() if value is not None else ""
-    return value or None

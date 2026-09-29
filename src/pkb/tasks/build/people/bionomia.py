@@ -9,41 +9,35 @@ from pkb.config import logger, settings
 from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
 from pkb.tasks.base import BaseTask
 from pkb.tasks.sources.people.bionomia import BionomiaPublicProfilesSourceTask
+from pkb.utils import clean_scalar
 
 
 PEOPLE_DIR = settings.intermediate_dir / "people"
 
 
-def _clean(value) -> str | None:
-    if value is None or pd.isna(value):
-        return None
-    value = str(value).strip()
-    return value or None
-
-
 def _split_pipe(value) -> list[str]:
-    value = _clean(value)
+    value = clean_scalar(value)
     if not value:
         return []
     return [part.strip() for part in value.split("|") if part.strip()]
 
 
 def _person_name(row) -> str | None:
-    if label_name := _clean(row.get("LabelName")):
+    if label_name := clean_scalar(row.get("LabelName")):
         return label_name
 
     parts = [
-        _clean(row.get("Given")),
-        _clean(row.get("Particle")),
-        _clean(row.get("Family")),
+        clean_scalar(row.get("Given")),
+        clean_scalar(row.get("Particle")),
+        clean_scalar(row.get("Family")),
     ]
     return " ".join(part for part in parts if part) or None
 
 
 def _bionomia_id(row) -> str | None:
-    if orcid := _clean(row.get("ORCID")):
+    if orcid := clean_scalar(row.get("ORCID")):
         return orcid
-    if url := _clean(row.get("URL")):
+    if url := clean_scalar(row.get("URL")):
         return url.rstrip("/").rsplit("/", 1)[-1]
     return None
 
@@ -78,16 +72,16 @@ class BionomiaPeopleTask(BaseTask):
                     "pkbPersonKey": f"{self.source_name}:{bionomia_id}",
                     "source": self.source_name,
                     "bionomiaID": bionomia_id,
-                    "orcidID": _clean(row.get("ORCID")),
-                    "wikidataID": _clean(row.get("wikidata")),
+                    "orcidID": clean_scalar(row.get("ORCID")),
+                    "wikidataID": clean_scalar(row.get("wikidata")),
                     "name": _person_name(row),
-                    "familyName": _clean(row.get("Family")),
-                    "givenName": _clean(row.get("Given")),
-                    "particle": _clean(row.get("Particle")),
+                    "familyName": clean_scalar(row.get("Family")),
+                    "givenName": clean_scalar(row.get("Given")),
+                    "particle": clean_scalar(row.get("Particle")),
                     "aliases": _split_pipe(row.get("OtherNames")),
-                    "country": _clean(row.get("Country")),
+                    "country": clean_scalar(row.get("Country")),
                     "keywords": _split_pipe(row.get("Keywords")),
-                    "url": _clean(row.get("URL")),
+                    "url": clean_scalar(row.get("URL")),
                 }
             )
 

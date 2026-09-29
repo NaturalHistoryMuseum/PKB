@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 from nameparser import HumanName
 
+from pkb.utils import clean_scalar
+
 
 @dataclass(frozen=True)
 class ParsedPersonName:
@@ -35,7 +37,7 @@ class ParsedPersonName:
 
 
 def parse_person_name(value) -> ParsedPersonName | None:
-    value = _clean_scalar(value)
+    value = clean_scalar(value)
     if not value:
         return None
     return _parse_person_name(value)
@@ -129,15 +131,6 @@ def _parse_person_name(value: str) -> ParsedPersonName | None:
         initials=initials,
         normalised=normalised,
     )
-
-
-def _clean_scalar(value) -> str | None:
-    if value is None:
-        return None
-    value = str(value).strip()
-    if not value or value.lower() in {"nan", "[none]", "<na>", "none"}:
-        return None
-    return value
 
 
 def _clean_name_for_parsing(value: str) -> str:

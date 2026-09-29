@@ -76,14 +76,11 @@ class Settings(BaseSettings):
     def cache_dir(self) -> Path:
         return self.root_dir / ".cache"
 
-    @property
-    def log_dir(self) -> Path:
-        return self.root_dir / ".log"    
-
 
 settings = Settings()
 
 # Create the directories
+
 
 def initialise_directories() -> None:
     for path in [
@@ -92,33 +89,22 @@ def initialise_directories() -> None:
         settings.intermediate_dir,
         settings.output_dir,
         settings.cache_dir,
-        settings.log_dir,
     ]:
         path.mkdir(parents=True, exist_ok=True)
 
-initialise_directories()    
+initialise_directories()
+
 
 def configure_logger() -> logging.Logger:
-    logger = logging.getLogger("luigi-interface")
+    logger = logging.getLogger("pkb")
     logger.setLevel(logging.DEBUG if settings.debug else logging.INFO)
 
-    if logger.handlers:
-        return logger
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        logger.addHandler(handler)
 
-    formatter = logging.Formatter(
-        "[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s"
-    )
-
-    file_handler = logging.FileHandler(settings.log_dir / "error.log")
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.WARNING)
-    logger.addHandler(file_handler)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.DEBUG if settings.debug else logging.INFO)
-    logger.addHandler(console_handler)
-
+    logger.propagate = False
     return logger
 
 

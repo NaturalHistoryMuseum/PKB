@@ -141,12 +141,17 @@ def test_harvard_index_people_build_maps_archived_collectors(monkeypatch, tmp_pa
 
 
 def test_harvard_index_people_build_logs_duplicate_count(
-    caplog,
     monkeypatch,
     tmp_path,
 ):
     import pkb.tasks.build.people.harvard as build_module
 
+    messages = []
+    monkeypatch.setattr(
+        build_module.logger,
+        "info",
+        lambda message, *args: messages.append(message % args),
+    )
     monkeypatch.setattr(
         HarvardIndexPeopleBuildTask,
         "input",
@@ -183,4 +188,4 @@ def test_harvard_index_people_build_logs_duplicate_count(
     assert (
         "Harvard Index deduplication: 2 source records -> 1 people "
         "(1 duplicates removed across 1 clusters)"
-    ) in caplog.text
+    ) in messages

@@ -12,22 +12,14 @@ from pkb.models.people import HUHPersonDeduplicator
 from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
 from pkb.tasks.base import BaseTask
 from pkb.tasks.sources.people.harvard import HarvardIndexCollectorsSourceTask
+from pkb.utils import clean_scalar
 
 
 PEOPLE_DIR = settings.intermediate_dir / "people"
 
 
-def _clean(value) -> str | None:
-    if value is None or pd.isna(value):
-        return None
-    value = str(value).strip()
-    if not value or value == "nan":
-        return None
-    return value
-
-
 def _parse_literal_collection(value) -> list[str]:
-    value = _clean(value)
+    value = clean_scalar(value)
     if not value:
         return []
 
@@ -37,16 +29,16 @@ def _parse_literal_collection(value) -> list[str]:
         return [value]
 
     if isinstance(parsed, (set, list, tuple)):
-        return sorted(str(item) for item in parsed if _clean(item))
+        return sorted(str(item) for item in parsed if clean_scalar(item))
 
     return [str(parsed)]
 
 
 def _name(row) -> str | None:
     return (
-        _clean(row.get("Standard/Label Name"))
-        or _clean(row.get("Full Name"))
-        or _clean(row.get("Name"))
+        clean_scalar(row.get("Standard/Label Name"))
+        or clean_scalar(row.get("Full Name"))
+        or clean_scalar(row.get("Name"))
     )
 
 
@@ -71,7 +63,7 @@ class HarvardIndexPeopleBuildTask(BaseTask):
 
         records = []
         for _, row in source.iterrows():
-            harvard_index_id = _clean(row.get("id"))
+            harvard_index_id = clean_scalar(row.get("id"))
             if not harvard_index_id:
                 continue
 
@@ -81,20 +73,20 @@ class HarvardIndexPeopleBuildTask(BaseTask):
                     "source": self.source_name,
                     "harvardIndexID": harvard_index_id,
                     "name": _name(row),
-                    "fullName": _clean(row.get("Full Name")),
-                    "standardName": _clean(row.get("Standard/Label Name")),
-                    "authorAbbreviation": _clean(row.get("B & P Author Abbrev.")),
-                    "dateOfBirth": _clean(row.get("Date of birth")),
-                    "dateOfDeath": _clean(row.get("Date of death")),
-                    "birthYear": _clean(row.get("birthYear")),
-                    "deathYear": _clean(row.get("deathYear")),
-                    "birthYearIsApprox": _clean(row.get("birthYearIsApprox")),
-                    "deathYearIsApprox": _clean(row.get("deathYearIsApprox")),
+                    "fullName": clean_scalar(row.get("Full Name")),
+                    "standardName": clean_scalar(row.get("Standard/Label Name")),
+                    "authorAbbreviation": clean_scalar(row.get("B & P Author Abbrev.")),
+                    "dateOfBirth": clean_scalar(row.get("Date of birth")),
+                    "dateOfDeath": clean_scalar(row.get("Date of death")),
+                    "birthYear": clean_scalar(row.get("birthYear")),
+                    "deathYear": clean_scalar(row.get("deathYear")),
+                    "birthYearIsApprox": clean_scalar(row.get("birthYearIsApprox")),
+                    "deathYearIsApprox": clean_scalar(row.get("deathYearIsApprox")),
                     "geographyISO": _parse_literal_collection(row.get("geographyISO")),
                     "herbariaCode": _parse_literal_collection(row.get("herbariaCode")),
                     "institutionUUID": _parse_literal_collection(row.get("institutionUUID")),
-                    "agentType": _clean(row.get("Agent type")),
-                    "url": _clean(row.get("URL")),
+                    "agentType": clean_scalar(row.get("Agent type")),
+                    "url": clean_scalar(row.get("URL")),
                 }
             )
 
@@ -171,8 +163,8 @@ def _merge_lists(values: pd.Series) -> list[str]:
     merged = []
     for value in values:
         if isinstance(value, list):
-            merged.extend(str(item) for item in value if _clean(item))
-        elif _clean(value):
+            merged.extend(str(item) for item in value if clean_scalar(item))
+        elif clean_scalar(value):
             merged.append(str(value))
     return sorted(set(merged))
 

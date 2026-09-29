@@ -16,6 +16,12 @@ BIONOMIA_CSV = (
 def test_bionomia_people_postgres_rows(monkeypatch, tmp_path):
     import pkb.tasks.load.postgres.bionomia as task_module
 
+    messages = []
+    monkeypatch.setattr(
+        task_module.logger,
+        "info",
+        lambda message, *args: messages.append(message % args),
+    )
     monkeypatch.setattr(
         BionomiaPeoplePostgresTask,
         "input",
@@ -43,7 +49,8 @@ def test_bionomia_people_postgres_rows(monkeypatch, tmp_path):
     )
 
     task = BionomiaPeoplePostgresTask()
-    row = dict(zip((column[0] for column in task.columns), next(task.rows())))
+    [values] = list(task.rows())
+    row = dict(zip((column[0] for column in task.columns), values))
 
     assert row["bionomia_id"] == "0000-0002-7101-9767"
     assert row["name"] == "Roderic Page"
@@ -52,3 +59,4 @@ def test_bionomia_people_postgres_rows(monkeypatch, tmp_path):
     assert row["given_names"] == "roderic"
     assert row["initials"] == "r"
     assert row["dataset_version"] == "version-123"
+    assert messages[-1] == "Prepared 1 Bionomia people for people_bionomia"
