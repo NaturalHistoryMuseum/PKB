@@ -18,6 +18,7 @@ PEOPLE = pd.DataFrame(
             "birth_date": None,
             "death_date": None,
             "geography": ["United Kingdom"],
+            "institutions": [],
             "wikidata_ids": ["Q1"],
             "harvard_index_ids": [],
             "bionomia_ids": ["B1"],
@@ -33,6 +34,7 @@ PEOPLE = pd.DataFrame(
             "birth_date": "1900",
             "death_date": "1980",
             "geography": ["GB"],
+            "institutions": ["uuid-1"],
             "wikidata_ids": [],
             "harvard_index_ids": ["H1"],
             "bionomia_ids": [],
@@ -48,6 +50,7 @@ PEOPLE = pd.DataFrame(
             "birth_date": "+1900-01-01T00:00:00Z",
             "death_date": "+1980-01-01T00:00:00Z",
             "geography": ["United Kingdom"],
+            "institutions": ["Example Herbarium"],
             "wikidata_ids": ["Q1"],
             "harvard_index_ids": ["H1"],
             "bionomia_ids": ["B1"],
@@ -68,6 +71,8 @@ def test_match_people_by_identifier_returns_pairs_with_source_fields():
     assert set(matches["right_source_id"]) == {"Q1"}
     assert matches["left_name_normalised"].eq("jane collector").all()
     assert matches["right_name_normalised"].eq("jane collector").all()
+    assert "left_institutions" in matches
+    assert "right_institutions" in matches
 
 
 def test_people_identifier_matches_task_writes_csv(monkeypatch, tmp_path):

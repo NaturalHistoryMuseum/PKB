@@ -65,6 +65,7 @@ PEOPLE_QUERY = """
         NULL::TEXT AS birth_date,
         NULL::TEXT AS death_date,
         CASE WHEN country IS NULL THEN '[]'::JSONB ELSE jsonb_build_array(country) END AS geography,
+        '[]'::JSONB AS institutions,
         CASE WHEN wikidata_id IS NULL THEN '[]'::JSONB ELSE jsonb_build_array(wikidata_id) END AS wikidata_ids,
         '[]'::JSONB AS harvard_index_ids,
         jsonb_build_array(bionomia_id) AS bionomia_ids
@@ -83,6 +84,7 @@ PEOPLE_QUERY = """
         birth_year,
         death_year,
         geography_iso,
+        institution_uuid,
         '[]'::JSONB,
         harvard_index_ids,
         '[]'::JSONB
@@ -101,6 +103,7 @@ PEOPLE_QUERY = """
         date_of_birth,
         date_of_death,
         countries_of_citizenship,
+        employers,
         jsonb_build_array(wikidata_id),
         CASE WHEN harvard_index_id IS NULL THEN '[]'::JSONB ELSE jsonb_build_array(harvard_index_id) END,
         CASE WHEN bionomia_id IS NULL THEN '[]'::JSONB ELSE jsonb_build_array(bionomia_id) END

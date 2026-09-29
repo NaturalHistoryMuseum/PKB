@@ -20,6 +20,7 @@ PERSON_COLUMNS = (
     "birth_date",
     "death_date",
     "geography",
+    "institutions",
 )
 
 
