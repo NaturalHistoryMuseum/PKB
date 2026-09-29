@@ -12,6 +12,7 @@ from pkb.models.people.names import (
     person_names_match_by_given_names,
     person_names_match_by_initials,
 )
+from pkb.models.people.resolution import match_people_by_identifier
 
 __all__ = [
     "ParsedPersonName",
@@ -20,6 +21,7 @@ __all__ = [
     "PersonAggregationResult",
     "PersonAggregator",
     "parse_person_name",
+    "match_people_by_identifier",
     "person_names_compatible",
     "person_names_match_by_given_names",
     "person_names_match_by_initials",
