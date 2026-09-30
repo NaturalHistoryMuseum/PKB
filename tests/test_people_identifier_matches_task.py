@@ -11,6 +11,7 @@ PEOPLE = pd.DataFrame(
             "source": "bionomia",
             "source_id": "B1",
             "name": "Jane Collector",
+            "name_variants": ["Jane Collector", "Jane Gatherer"],
             "name_normalised": "jane collector",
             "surname": "collector",
             "given_names": "jane",
@@ -27,6 +28,7 @@ PEOPLE = pd.DataFrame(
             "source": "harvard_index",
             "source_id": "H1",
             "name": "Collector, Jane",
+            "name_variants": ["Collector, Jane"],
             "name_normalised": "jane collector",
             "surname": "collector",
             "given_names": "jane",
@@ -43,6 +45,7 @@ PEOPLE = pd.DataFrame(
             "source": "wikidata",
             "source_id": "Q1",
             "name": "Jane Collector",
+            "name_variants": ["Jane Collector", "Jane Gatherer"],
             "name_normalised": "jane collector",
             "surname": "collector",
             "given_names": "jane",
@@ -71,6 +74,8 @@ def test_match_people_by_identifier_returns_pairs_with_source_fields():
     assert set(matches["right_source_id"]) == {"Q1"}
     assert matches["left_name_normalised"].eq("jane collector").all()
     assert matches["right_name_normalised"].eq("jane collector").all()
+    assert "left_name_variants" in matches
+    assert "right_name_variants" in matches
     assert "left_institutions" in matches
     assert "right_institutions" in matches
 

@@ -13,6 +13,7 @@ PERSON_COLUMNS = (
     "source",
     "source_id",
     "name",
+    "name_variants",
     "name_normalised",
     "surname",
     "given_names",

@@ -58,6 +58,9 @@ PEOPLE_QUERY = """
         'bionomia' AS source,
         bionomia_id AS source_id,
         name,
+        jsonb_build_array(name, label_name)
+            || COALESCE(to_jsonb(string_to_array(other_names, '|')), '[]'::JSONB)
+            AS name_variants,
         name_normalised,
         surname,
         given_names,
@@ -77,6 +80,7 @@ PEOPLE_QUERY = """
         'harvard_index',
         harvard_index_id,
         name,
+        jsonb_build_array(name, full_name, standard_name),
         name_normalised,
         surname,
         given_names,
@@ -96,6 +100,7 @@ PEOPLE_QUERY = """
         'wikidata',
         wikidata_id,
         name,
+        jsonb_build_array(name, birth_name) || aliases,
         name_normalised,
         surname,
         given_names,
