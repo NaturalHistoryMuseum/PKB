@@ -12,7 +12,11 @@ from pkb.models.people.names import (
     person_names_match_by_given_names,
     person_names_match_by_initials,
 )
-from pkb.models.people.resolution import match_people_by_identifier
+from pkb.models.people.resolution import (
+    build_people_identifier_map,
+    match_people_by_identifier,
+    match_people_by_logistic_regression,
+)
 
 __all__ = [
     "ParsedPersonName",
@@ -20,8 +24,10 @@ __all__ = [
     "HUHPersonDeduplicator",
     "PersonAggregationResult",
     "PersonAggregator",
+    "build_people_identifier_map",
     "parse_person_name",
     "match_people_by_identifier",
+    "match_people_by_logistic_regression",
     "person_names_compatible",
     "person_names_match_by_given_names",
     "person_names_match_by_initials",

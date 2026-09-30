@@ -27,21 +27,25 @@ class PeopleIdentifierMatchesTask(BaseTask):
         return luigi.LocalTarget(PEOPLE_DIR / "people_identifier_matches.csv")
 
     def run(self):
-        connection = psycopg2.connect(
-            host=settings.postgres_host,
-            port=settings.postgres_port,
-            dbname=settings.postgres_database,
-            user=settings.postgres_user,
-            password=settings.postgres_password,
-        )
-        try:
-            people = _read_dataframe(connection, PEOPLE_QUERY)
-        finally:
-            connection.close()
+        people = read_people()
 
         matches = match_people_by_identifier(people)
         matches.to_csv(self.output().path, index=False)
         logger.info("Wrote %s identifier matches to %s", len(matches), self.output().path)
+
+
+def read_people() -> pd.DataFrame:
+    connection = psycopg2.connect(
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        dbname=settings.postgres_database,
+        user=settings.postgres_user,
+        password=settings.postgres_password,
+    )
+    try:
+        return _read_dataframe(connection, PEOPLE_QUERY)
+    finally:
+        connection.close()
 
 
 def _read_dataframe(connection, query: str) -> pd.DataFrame:

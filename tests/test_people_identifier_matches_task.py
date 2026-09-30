@@ -1,7 +1,11 @@
 import luigi
 import pandas as pd
 
-from pkb.models.people import match_people_by_identifier
+from pkb.models.people import (
+    build_people_identifier_map,
+    match_people_by_identifier,
+    match_people_by_logistic_regression,
+)
 from pkb.tasks.build.people.identifier_matches import PeopleIdentifierMatchesTask
 
 
@@ -100,3 +104,82 @@ def test_people_identifier_matches_task_writes_csv(monkeypatch, tmp_path):
 
     matches = pd.read_csv(task.output().path)
     assert len(matches) == 3
+
+
+def test_logistic_matcher_adds_name_match_without_shared_identifier():
+    people = []
+
+    def add(source, source_id, first_name, surname, wikidata_ids=()):
+        name = f"{first_name} {surname}"
+        people.append(
+            {
+                "source": source,
+                "source_id": source_id,
+                "name": name,
+                "name_variants": [name],
+                "name_normalised": name.lower(),
+                "surname": surname.lower(),
+                "given_names": first_name.lower(),
+                "initials": first_name[0].lower(),
+                "birth_date": None,
+                "death_date": None,
+                "geography": [],
+                "institutions": [],
+                "wikidata_ids": list(wikidata_ids),
+                "harvard_index_ids": [],
+                "bionomia_ids": [],
+            }
+        )
+
+    for index in range(4):
+        add("bionomia", f"BP{index}", "Alice", f"Positive{index}", [f"QP{index}"])
+        add("wikidata", f"QP{index}", "Alice", f"Positive{index}", [f"QP{index}"])
+        add("bionomia", f"BN{index}", "Alice", f"Negative{index}", [f"QL{index}"])
+        add("wikidata", f"QR{index}", "Bob", f"Negative{index}", [f"QR{index}"])
+
+    add("harvard_index", "HT", "Clara", "Target")
+    add("wikidata", "QT", "Clara", "Target")
+    people = pd.DataFrame(people)
+    identifier_matches = match_people_by_identifier(people)
+
+    matches = match_people_by_logistic_regression(
+        people,
+        identifier_matches,
+        pd.DataFrame(columns=["key", "name"]),
+        threshold=0.5,
+    )
+
+    assert (matches["left_source_id"] == "HT").any()
+    assert (matches["right_source_id"] == "QT").any()
+
+
+def test_build_people_identifier_map_keeps_only_identifiers():
+    identifier_matches = pd.DataFrame(
+        [
+            {
+                "left_source": "bionomia",
+                "left_source_id": "B1",
+                "right_source": "wikidata",
+                "right_source_id": "Q1",
+            }
+        ]
+    )
+    logistic_matches = pd.DataFrame(
+        [
+            {
+                "left_source": "harvard_index",
+                "left_source_id": "H1",
+                "right_source": "wikidata",
+                "right_source_id": "Q1",
+            }
+        ]
+    )
+
+    identifiers = build_people_identifier_map(
+        PEOPLE,
+        identifier_matches,
+        logistic_matches,
+    )
+
+    assert identifiers.columns.tolist() == ["person_id", "source", "source_id"]
+    assert identifiers["person_id"].nunique() == 1
