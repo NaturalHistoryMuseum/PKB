@@ -5,16 +5,16 @@ import json
 from io import StringIO
 
 import pandas as pd
-from luigi.contrib.postgres import CopyToTable
 
 from pkb.config import logger, settings
 from pkb.models.people import HUHPersonDeduplicator
 from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
+from pkb.tasks.base import PostgresCopyToTableTask
 from pkb.tasks.sources.people.harvard import HarvardIndexCollectorsSourceTask
 from pkb.utils import clean_scalar, parse_literal_collection
 
 
-class HarvardIndexPeoplePostgresTask(CopyToTable):
+class HarvardIndexPeoplePostgresTask(PostgresCopyToTableTask):
     host = settings.postgres_host
     port = settings.postgres_port
     database = settings.postgres_database

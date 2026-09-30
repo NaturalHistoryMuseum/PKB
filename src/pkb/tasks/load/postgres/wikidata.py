@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 
-from luigi.contrib.postgres import CopyToTable
-
 from pkb.config import logger, settings
 from pkb.models.people.names import parse_person_name
 from pkb.storage import read_dataset_version
+from pkb.tasks.base import PostgresCopyToTableTask
 from pkb.tasks.sources.people.wikidata import (
     WikiDataCollectorEntitiesSourceTask,
     WikiDataCollectorPropertyEntitiesSourceTask,
@@ -15,7 +14,7 @@ from pkb.tasks.sources.people.wikidata import (
 from pkb.wikidata.parsers import label, parse_collector_entity
 
 
-class WikiDataPeoplePostgresTask(CopyToTable):
+class WikiDataPeoplePostgresTask(PostgresCopyToTableTask):
     host = settings.postgres_host
     port = settings.postgres_port
     database = settings.postgres_database

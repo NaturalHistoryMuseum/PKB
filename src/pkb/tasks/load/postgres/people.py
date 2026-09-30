@@ -1,7 +1,6 @@
 from itertools import combinations
 
 import pandas as pd
-from luigi.contrib.postgres import CopyToTable
 
 from pkb.config import logger, settings
 from pkb.models.people import (
@@ -11,12 +10,13 @@ from pkb.models.people import (
 )
 from pkb.tasks.build.institutions.grscicol import GRSciCollInstitutionsTSVTask
 from pkb.tasks.build.people.identifier_matches import read_people
+from pkb.tasks.base import PostgresCopyToTableTask
 from pkb.tasks.load.postgres.bionomia import BionomiaPeoplePostgresTask
 from pkb.tasks.load.postgres.harvard import HarvardIndexPeoplePostgresTask
 from pkb.tasks.load.postgres.wikidata import WikiDataPeoplePostgresTask
 
 
-class PeopleIdentifiersPostgresTask(CopyToTable):
+class PeopleIdentifiersPostgresTask(PostgresCopyToTableTask):
     host = settings.postgres_host
     port = settings.postgres_port
     database = settings.postgres_database

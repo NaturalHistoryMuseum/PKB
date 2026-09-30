@@ -3,16 +3,15 @@ from __future__ import annotations
 import csv
 from io import StringIO
 
-from luigi.contrib.postgres import CopyToTable
-
 from pkb.config import logger, settings
 from pkb.models.people.names import parse_person_name
 from pkb.storage import fetch_source_dataset, get_s3_client, read_dataset_version
+from pkb.tasks.base import PostgresCopyToTableTask
 from pkb.tasks.sources.people.bionomia import BionomiaPublicProfilesSourceTask
 from pkb.utils import clean_scalar
 
 
-class BionomiaPeoplePostgresTask(CopyToTable):
+class BionomiaPeoplePostgresTask(PostgresCopyToTableTask):
     host = settings.postgres_host
     port = settings.postgres_port
     database = settings.postgres_database
