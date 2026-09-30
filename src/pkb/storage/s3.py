@@ -116,7 +116,7 @@ def store_source_dataset(
     s3,
     dataset: str,
     source_url: str,
-    data: bytes,
+    data: bytes | bytearray,
     bucket: str | None = None,
     key: str | None = None,
     upstream_version: str | None = None,
@@ -222,5 +222,5 @@ def fetch_source_object(*, s3, source_object: SourceObject) -> bytes:
     return response["Body"].read()
 
 
-def sha256_bytes(data: bytes) -> str:
+def sha256_bytes(data: bytes | bytearray) -> str:
     return hashlib.sha256(data).hexdigest()

@@ -4,6 +4,7 @@ import json
 
 import luigi
 import requests
+from tqdm import tqdm
 
 from pkb.config import logger, settings
 from pkb.storage import (
@@ -32,8 +33,23 @@ class GeoNamesSourceTask(BaseTask):
     def run(self):
         url = f"{GEONAMES_URL}/{self.filename}"
         logger.info("Downloading GeoNames %s from %s", self.dataset, url)
-        response = requests.get(url, timeout=self.timeout_seconds)
-        response.raise_for_status()
+        response = requests.get(url, timeout=self.timeout_seconds, stream=True)
+        data = bytearray()
+        try:
+            response.raise_for_status()
+            with tqdm(
+                total=int(response.headers.get("content-length", 0)) or None,
+                desc=f"Downloading GeoNames {self.dataset}",
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as progress:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        data.extend(chunk)
+                        progress.update(len(chunk))
+        finally:
+            response.close()
 
         s3 = get_s3_client()
         ensure_source_bucket(s3=s3)
@@ -41,7 +57,7 @@ class GeoNamesSourceTask(BaseTask):
             s3=s3,
             dataset=f"geonames_{self.dataset}",
             source_url=response.url,
-            data=response.content,
+            data=data,
             key=f"geonames/places/{self.filename}",
         )
 

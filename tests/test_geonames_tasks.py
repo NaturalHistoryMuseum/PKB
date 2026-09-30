@@ -38,15 +38,38 @@ def _zip(filename, contents):
 def test_geonames_source_stores_zip(monkeypatch, tmp_path, task_class, filename, dataset):
     import pkb.tasks.sources.places.geonames as task_module
 
+    progress = {}
+
+    class Progress:
+        def __init__(self, **kwargs):
+            progress.update(kwargs)
+            progress["downloaded"] = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def update(self, size):
+            progress["downloaded"] += size
+
     class Response:
         url = f"https://download.geonames.org/export/dump/{filename}"
-        content = b"zip"
+        headers = {"content-length": "3"}
 
         def raise_for_status(self):
             pass
 
+        def iter_content(self, chunk_size):
+            yield b"zip"
+
+        def close(self):
+            pass
+
     calls = []
     monkeypatch.setattr(task_module, "GEONAMES_SOURCE_DIR", tmp_path)
+    monkeypatch.setattr(task_module, "tqdm", Progress)
     monkeypatch.setattr(
         task_module.requests,
         "get",
@@ -79,9 +102,12 @@ def test_geonames_source_stores_zip(monkeypatch, tmp_path, task_class, filename,
     assert calls == [
         (
             (f"https://download.geonames.org/export/dump/{filename}",),
-            {"timeout": 1800},
+            {"timeout": 1800, "stream": True},
         )
     ]
+    assert progress["total"] == 3
+    assert progress["downloaded"] == 3
+    assert progress["desc"] == f"Downloading GeoNames {dataset}"
 
 
 @pytest.mark.parametrize(
