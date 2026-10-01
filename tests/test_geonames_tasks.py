@@ -236,6 +236,38 @@ def test_geonames_postgres_rows(
     assert {column: row[column] for column in expected} == expected
 
 
+@pytest.mark.parametrize(
+    ("task_class", "index_names"),
+    [
+        (
+            GeoNamesPlacesPostgresTask,
+            ["places_geonames_name_trgm", "places_geonames_ascii_name_trgm"],
+        ),
+        (
+            GeoNamesAlternateNamesPostgresTask,
+            [
+                "places_geonames_alternate_names_geoname_id_idx",
+                "places_geonames_alternate_name_trgm",
+            ],
+        ),
+    ],
+)
+def test_geonames_postgres_indexes(task_class, index_names):
+    queries = []
+
+    class Cursor:
+        def execute(self, query):
+            queries.append(query)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    task_class().post_copy(Connection())
+
+    assert all(any(index_name in query for query in queries) for index_name in index_names)
+
+
 def test_geonames_relationships_require_all_hierarchy_inputs():
     task = GeoNamesRelationshipsPostgresTask()
     dependencies = task.requires()

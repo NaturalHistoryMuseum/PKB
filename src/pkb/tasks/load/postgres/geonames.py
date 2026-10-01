@@ -89,6 +89,17 @@ class GeoNamesPlacesPostgresTask(_GeoNamesPostgresTask):
             )
         logger.info("Prepared %s GeoNames places for %s", count, self.table)
 
+    def post_copy(self, connection):
+        cursor = connection.cursor()
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS places_geonames_name_trgm "
+            f"ON {self.table} USING GIN (lower(name) gin_trgm_ops)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS places_geonames_ascii_name_trgm "
+            f"ON {self.table} USING GIN (lower(ascii_name) gin_trgm_ops)"
+        )
+
 
 class GeoNamesAlternateNamesPostgresTask(_GeoNamesPostgresTask):
     table = "places_geonames_alternate_names"
@@ -131,9 +142,14 @@ class GeoNamesAlternateNamesPostgresTask(_GeoNamesPostgresTask):
         logger.info("Prepared %s GeoNames alternate names for %s", count, self.table)
 
     def post_copy(self, connection):
-        connection.cursor().execute(
+        cursor = connection.cursor()
+        cursor.execute(
             "CREATE INDEX IF NOT EXISTS places_geonames_alternate_names_geoname_id_idx "
             f"ON {self.table} (geoname_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS places_geonames_alternate_name_trgm "
+            f"ON {self.table} USING GIN (lower(name) gin_trgm_ops)"
         )
 
 
