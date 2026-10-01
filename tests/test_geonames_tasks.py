@@ -8,11 +8,17 @@ import pytest
 
 from pkb.storage import DatasetVersion
 from pkb.tasks.load.postgres.geonames import (
+    GeoNamesAdmin1CodesPostgresTask,
+    GeoNamesAdmin2CodesPostgresTask,
     GeoNamesAlternateNamesPostgresTask,
+    GeoNamesHierarchyPostgresTask,
     GeoNamesPlacesPostgresTask,
 )
 from pkb.tasks.sources.places.geonames import (
+    GeoNamesAdmin1CodesSourceTask,
+    GeoNamesAdmin2CodesSourceTask,
     GeoNamesAlternateNamesSourceTask,
+    GeoNamesHierarchySourceTask,
     GeoNamesPlacesSourceTask,
 )
 
@@ -33,6 +39,13 @@ def _zip(filename, contents):
             "alternateNamesV2.zip",
             "alternate_names",
         ),
+        (GeoNamesHierarchySourceTask, "hierarchy.zip", "hierarchy"),
+        (
+            GeoNamesAdmin1CodesSourceTask,
+            "admin1CodesASCII.txt",
+            "admin1_codes",
+        ),
+        (GeoNamesAdmin2CodesSourceTask, "admin2Codes.txt", "admin2_codes"),
     ],
 )
 def test_geonames_source_stores_zip(monkeypatch, tmp_path, task_class, filename, dataset):
@@ -143,6 +156,39 @@ def test_geonames_source_stores_zip(monkeypatch, tmp_path, task_class, filename,
                 "dataset_version": "version-1",
             },
         ),
+        (
+            GeoNamesHierarchyPostgresTask,
+            "hierarchy.txt",
+            "6252001\t2643743\tADM\n",
+            {
+                "parent_geoname_id": 6252001,
+                "child_geoname_id": 2643743,
+                "relationship_type": "ADM",
+                "dataset_version": "version-1",
+            },
+        ),
+        (
+            GeoNamesAdmin1CodesPostgresTask,
+            None,
+            "GB.ENG\tEngland\tEngland\t6269131\n",
+            {
+                "code": "GB.ENG",
+                "name": "England",
+                "geoname_id": 6269131,
+                "dataset_version": "version-1",
+            },
+        ),
+        (
+            GeoNamesAdmin2CodesPostgresTask,
+            None,
+            "GB.ENG.GLA\tGreater London\tGreater London\t2648110\n",
+            {
+                "code": "GB.ENG.GLA",
+                "name": "Greater London",
+                "geoname_id": 2648110,
+                "dataset_version": "version-1",
+            },
+        ),
     ],
 )
 def test_geonames_postgres_rows(
@@ -179,7 +225,7 @@ def test_geonames_postgres_rows(
     monkeypatch.setattr(
         task_module,
         "fetch_source_dataset",
-        lambda **kwargs: _zip(member, contents),
+        lambda **kwargs: _zip(member, contents) if member else contents.encode(),
     )
 
     task = task_class()

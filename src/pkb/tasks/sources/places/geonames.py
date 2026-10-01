@@ -86,3 +86,18 @@ class GeoNamesPlacesSourceTask(GeoNamesSourceTask):
 class GeoNamesAlternateNamesSourceTask(GeoNamesSourceTask):
     filename = "alternateNamesV2.zip"
     dataset = "alternate_names"
+
+
+class GeoNamesHierarchySourceTask(GeoNamesSourceTask):
+    filename = "hierarchy.zip"
+    dataset = "hierarchy"
+
+
+class GeoNamesAdmin1CodesSourceTask(GeoNamesSourceTask):
+    filename = "admin1CodesASCII.txt"
+    dataset = "admin1_codes"
+
+
+class GeoNamesAdmin2CodesSourceTask(GeoNamesSourceTask):
+    filename = "admin2Codes.txt"
+    dataset = "admin2_codes"
