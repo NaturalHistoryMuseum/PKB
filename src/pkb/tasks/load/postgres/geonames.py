@@ -229,15 +229,7 @@ class GeoNamesRelationshipsPostgresTask(PostgresQueryTask):
         return f"{self.task_family}:{versions}"
 
     query = """
-        CREATE TABLE IF NOT EXISTS places_geonames_relationships (
-            child_geoname_id BIGINT NOT NULL,
-            parent_geoname_id BIGINT NOT NULL,
-            relationship_type TEXT NOT NULL,
-            PRIMARY KEY (child_geoname_id, parent_geoname_id, relationship_type)
-        );
-
-        TRUNCATE TABLE places_geonames_relationships;
-
+        CREATE MATERIALIZED VIEW IF NOT EXISTS places_geonames_relationships AS
         WITH countries AS (
             SELECT country_code, MIN(geoname_id) AS geoname_id
             FROM places_geonames
@@ -296,10 +288,12 @@ class GeoNamesRelationshipsPostgresTask(PostgresQueryTask):
             LEFT JOIN countries AS country
               ON country.country_code = place.country_code
         )
-        INSERT INTO places_geonames_relationships
         SELECT hierarchy.child_geoname_id,
                hierarchy.parent_geoname_id,
-               COALESCE(hierarchy.relationship_type, 'hierarchy')
+               COALESCE(
+                   hierarchy.relationship_type,
+                   'hierarchy'
+               ) AS relationship_type
         FROM places_geonames_hierarchy AS hierarchy
         JOIN places_geonames AS child
           ON child.geoname_id = hierarchy.child_geoname_id
@@ -321,7 +315,16 @@ class GeoNamesRelationshipsPostgresTask(PostgresQueryTask):
                 AND hierarchy.relationship_type = 'ADM'
           )
 
-        ON CONFLICT DO NOTHING;
+        WITH NO DATA;
+
+        REFRESH MATERIALIZED VIEW places_geonames_relationships;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS places_geonames_relationships_key
+        ON places_geonames_relationships (
+            child_geoname_id,
+            parent_geoname_id,
+            relationship_type
+        );
 
         CREATE INDEX IF NOT EXISTS places_geonames_relationships_parent_idx
         ON places_geonames_relationships (parent_geoname_id);

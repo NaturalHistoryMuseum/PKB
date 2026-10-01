@@ -237,7 +237,8 @@ def test_geonames_postgres_rows(
 
 
 def test_geonames_relationships_require_all_hierarchy_inputs():
-    dependencies = GeoNamesRelationshipsPostgresTask().requires()
+    task = GeoNamesRelationshipsPostgresTask()
+    dependencies = task.requires()
 
     assert [type(task) for task in dependencies] == [
         GeoNamesPlacesPostgresTask,
@@ -245,3 +246,5 @@ def test_geonames_relationships_require_all_hierarchy_inputs():
         GeoNamesAdmin1CodesPostgresTask,
         GeoNamesAdmin2CodesPostgresTask,
     ]
+    assert "CREATE MATERIALIZED VIEW IF NOT EXISTS" in task.query
+    assert "REFRESH MATERIALIZED VIEW" in task.query
