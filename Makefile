@@ -33,3 +33,6 @@ postgres-logs:
 
 postgres-connect:
 	cd docker/postgres && docker compose exec postgres psql -U pkb -d pkb
+
+postgres-provision:
+	cd docker/postgres && docker compose exec -T postgres psql -U pkb -d pkb < init/001-extensions.sql
