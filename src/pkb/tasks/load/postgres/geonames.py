@@ -309,9 +309,17 @@ class GeoNamesRelationshipsPostgresTask(PostgresQueryTask):
 
         UNION
 
-        SELECT child_geoname_id, parent_geoname_id, relationship_type
-        FROM administrative_relationships
-        WHERE parent_geoname_id IS NOT NULL
+        SELECT derived.child_geoname_id,
+               derived.parent_geoname_id,
+               derived.relationship_type
+        FROM administrative_relationships AS derived
+        WHERE derived.parent_geoname_id IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM places_geonames_hierarchy AS hierarchy
+              WHERE hierarchy.child_geoname_id = derived.child_geoname_id
+                AND hierarchy.relationship_type = 'ADM'
+          )
 
         ON CONFLICT DO NOTHING;
 
