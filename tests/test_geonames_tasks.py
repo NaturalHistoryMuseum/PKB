@@ -199,7 +199,7 @@ def test_geonames_postgres_rows(
     contents,
     expected,
 ):
-    import pkb.tasks.load.postgres.geonames as task_module
+    import pkb.storage.readers as reader_module
 
     path = tmp_path / "dataset-version.json"
     monkeypatch.setattr(
@@ -208,7 +208,7 @@ def test_geonames_postgres_rows(
         lambda self: luigi.LocalTarget(path),
     )
     monkeypatch.setattr(
-        task_module,
+        reader_module,
         "read_dataset_version",
         lambda path: DatasetVersion(
             dataset="geonames",
@@ -221,9 +221,9 @@ def test_geonames_postgres_rows(
             s3_version_id="version-1",
         ),
     )
-    monkeypatch.setattr(task_module, "get_s3_client", lambda: "s3")
+    monkeypatch.setattr(reader_module, "get_s3_client", lambda: "s3")
     monkeypatch.setattr(
-        task_module,
+        reader_module,
         "fetch_source_dataset",
         lambda **kwargs: _zip(member, contents) if member else contents.encode(),
     )

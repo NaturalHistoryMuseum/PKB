@@ -22,6 +22,11 @@ def clean_scalar(value) -> str | None:
     return value
 
 
+def clean_integer(value) -> int | None:
+    value = clean_scalar(value)
+    return int(value) if value else None
+
+
 def parse_literal_collection(value) -> list[str]:
     value = clean_scalar(value)
     if not value:
