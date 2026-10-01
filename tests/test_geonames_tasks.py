@@ -14,6 +14,7 @@ from pkb.tasks.load.postgres.geonames import (
     GeoNamesHierarchyPostgresTask,
     GeoNamesPlacesPostgresTask,
     GeoNamesRelationshipsPostgresTask,
+    GeoNamesSearchPostgresTask,
 )
 from pkb.tasks.sources.places.geonames import (
     GeoNamesAdmin1CodesSourceTask,
@@ -266,6 +267,16 @@ def test_geonames_postgres_indexes(task_class, index_names):
     task_class().post_copy(Connection())
 
     assert all(any(index_name in query for query in queries) for index_name in index_names)
+
+
+def test_geonames_search_requires_places_and_names():
+    task = GeoNamesSearchPostgresTask()
+
+    assert [type(dependency) for dependency in task.requires()] == [
+        GeoNamesPlacesPostgresTask,
+        GeoNamesAlternateNamesPostgresTask,
+    ]
+    assert "CREATE OR REPLACE VIEW places_geonames_search" in task.query
 
 
 def test_geonames_relationships_require_all_hierarchy_inputs():

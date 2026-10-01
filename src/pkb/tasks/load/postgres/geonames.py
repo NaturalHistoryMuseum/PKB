@@ -153,6 +153,83 @@ class GeoNamesAlternateNamesPostgresTask(_GeoNamesPostgresTask):
         )
 
 
+class GeoNamesSearchPostgresTask(PostgresQueryTask):
+    host = settings.postgres_host
+    port = settings.postgres_port
+    database = settings.postgres_database
+    user = settings.postgres_user
+    password = settings.postgres_password
+    table = "places_geonames_search"
+
+    def requires(self):
+        return [
+            GeoNamesPlacesPostgresTask(),
+            GeoNamesAlternateNamesPostgresTask(),
+        ]
+
+    query = """
+        CREATE OR REPLACE VIEW places_geonames_search AS
+        SELECT
+            place.geoname_id,
+            place.name AS canonical_name,
+            place.name,
+            lower(place.name) AS search_name,
+            'canonical'::TEXT AS name_type,
+            NULL::TEXT AS language,
+            TRUE AS is_preferred,
+            COALESCE(place.feature_code LIKE '%H', FALSE) AS is_historic,
+            place.country_code,
+            place.feature_class,
+            place.feature_code,
+            place.latitude,
+            place.longitude,
+            place.population
+        FROM places_geonames AS place
+
+        UNION ALL
+
+        SELECT
+            place.geoname_id,
+            place.name,
+            place.ascii_name,
+            lower(place.ascii_name),
+            'ascii'::TEXT,
+            NULL::TEXT,
+            FALSE,
+            COALESCE(place.feature_code LIKE '%H', FALSE),
+            place.country_code,
+            place.feature_class,
+            place.feature_code,
+            place.latitude,
+            place.longitude,
+            place.population
+        FROM places_geonames AS place
+        WHERE place.ascii_name IS NOT NULL
+          AND place.ascii_name <> place.name
+
+        UNION ALL
+
+        SELECT
+            place.geoname_id,
+            place.name,
+            alternate.name,
+            lower(alternate.name),
+            'alternate'::TEXT,
+            alternate.language,
+            alternate.is_preferred,
+            alternate.is_historic,
+            place.country_code,
+            place.feature_class,
+            place.feature_code,
+            place.latitude,
+            place.longitude,
+            place.population
+        FROM places_geonames_alternate_names AS alternate
+        JOIN places_geonames AS place
+          ON place.geoname_id = alternate.geoname_id;
+    """
+
+
 class GeoNamesHierarchyPostgresTask(_GeoNamesPostgresTask):
     table = "places_geonames_hierarchy"
     columns = [
