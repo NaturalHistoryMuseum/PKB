@@ -13,6 +13,7 @@ from pkb.tasks.load.postgres.geonames import (
     GeoNamesAlternateNamesPostgresTask,
     GeoNamesHierarchyPostgresTask,
     GeoNamesPlacesPostgresTask,
+    GeoNamesRelationshipsPostgresTask,
 )
 from pkb.tasks.sources.places.geonames import (
     GeoNamesAdmin1CodesSourceTask,
@@ -233,3 +234,14 @@ def test_geonames_postgres_rows(
     row = dict(zip((column[0] for column in task.columns), values))
 
     assert {column: row[column] for column in expected} == expected
+
+
+def test_geonames_relationships_require_all_hierarchy_inputs():
+    dependencies = GeoNamesRelationshipsPostgresTask().requires()
+
+    assert [type(task) for task in dependencies] == [
+        GeoNamesPlacesPostgresTask,
+        GeoNamesHierarchyPostgresTask,
+        GeoNamesAdmin1CodesPostgresTask,
+        GeoNamesAdmin2CodesPostgresTask,
+    ]

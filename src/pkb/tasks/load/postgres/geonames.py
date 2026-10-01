@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pkb.config import logger, settings
 from pkb.storage import iter_source_dataset_rows, read_dataset_version
-from pkb.tasks.base import PostgresCopyToTableTask
+from pkb.tasks.base import PostgresCopyToTableTask, PostgresQueryTask
 from pkb.tasks.sources.places.geonames import (
     GeoNamesAdmin1CodesSourceTask,
     GeoNamesAdmin2CodesSourceTask,
@@ -205,3 +205,126 @@ class GeoNamesAdmin1CodesPostgresTask(_GeoNamesAdminCodesPostgresTask):
 class GeoNamesAdmin2CodesPostgresTask(_GeoNamesAdminCodesPostgresTask):
     source_task = GeoNamesAdmin2CodesSourceTask
     table = "places_geonames_admin2_codes"
+
+
+class GeoNamesRelationshipsPostgresTask(PostgresQueryTask):
+    host = settings.postgres_host
+    port = settings.postgres_port
+    database = settings.postgres_database
+    user = settings.postgres_user
+    password = settings.postgres_password
+    table = "places_geonames_relationships"
+
+    def requires(self):
+        return [
+            GeoNamesPlacesPostgresTask(),
+            GeoNamesHierarchyPostgresTask(),
+            GeoNamesAdmin1CodesPostgresTask(),
+            GeoNamesAdmin2CodesPostgresTask(),
+        ]
+
+    @property
+    def update_id(self):
+        versions = ":".join(task.update_id for task in self.requires())
+        return f"{self.task_family}:{versions}"
+
+    query = """
+        CREATE TABLE IF NOT EXISTS places_geonames_relationships (
+            child_geoname_id BIGINT NOT NULL,
+            parent_geoname_id BIGINT NOT NULL,
+            relationship_type TEXT NOT NULL,
+            PRIMARY KEY (child_geoname_id, parent_geoname_id, relationship_type)
+        );
+
+        TRUNCATE TABLE places_geonames_relationships;
+
+        WITH countries AS (
+            SELECT country_code, MIN(geoname_id) AS geoname_id
+            FROM places_geonames
+            WHERE feature_code IN ('PCLI', 'PCLD', 'PCLF', 'PCLS')
+              AND country_code IS NOT NULL
+            GROUP BY country_code
+            HAVING COUNT(*) = 1
+        ),
+        admin3 AS (
+            SELECT country_code, admin1_code, admin2_code, admin3_code,
+                   MIN(geoname_id) AS geoname_id
+            FROM places_geonames
+            WHERE feature_code = 'ADM3'
+              AND admin3_code IS NOT NULL
+            GROUP BY country_code, admin1_code, admin2_code, admin3_code
+            HAVING COUNT(*) = 1
+        ),
+        admin4 AS (
+            SELECT country_code, admin1_code, admin2_code, admin3_code,
+                   admin4_code, MIN(geoname_id) AS geoname_id
+            FROM places_geonames
+            WHERE feature_code = 'ADM4'
+              AND admin4_code IS NOT NULL
+            GROUP BY country_code, admin1_code, admin2_code, admin3_code,
+                     admin4_code
+            HAVING COUNT(*) = 1
+        ),
+        administrative_relationships AS (
+            SELECT
+                place.geoname_id AS child_geoname_id,
+                COALESCE(
+                    NULLIF(admin4.geoname_id, place.geoname_id),
+                    NULLIF(admin3.geoname_id, place.geoname_id),
+                    NULLIF(admin2.geoname_id, place.geoname_id),
+                    NULLIF(admin1.geoname_id, place.geoname_id),
+                    NULLIF(country.geoname_id, place.geoname_id)
+                ) AS parent_geoname_id,
+                'ADM' AS relationship_type
+            FROM places_geonames AS place
+            LEFT JOIN admin4
+              ON admin4.country_code = place.country_code
+             AND admin4.admin1_code IS NOT DISTINCT FROM place.admin1_code
+             AND admin4.admin2_code IS NOT DISTINCT FROM place.admin2_code
+             AND admin4.admin3_code IS NOT DISTINCT FROM place.admin3_code
+             AND admin4.admin4_code = place.admin4_code
+            LEFT JOIN admin3
+              ON admin3.country_code = place.country_code
+             AND admin3.admin1_code IS NOT DISTINCT FROM place.admin1_code
+             AND admin3.admin2_code IS NOT DISTINCT FROM place.admin2_code
+             AND admin3.admin3_code = place.admin3_code
+            LEFT JOIN places_geonames_admin2_codes AS admin2
+              ON admin2.code = place.country_code || '.' || place.admin1_code
+                             || '.' || place.admin2_code
+            LEFT JOIN places_geonames_admin1_codes AS admin1
+              ON admin1.code = place.country_code || '.' || place.admin1_code
+            LEFT JOIN countries AS country
+              ON country.country_code = place.country_code
+        )
+        INSERT INTO places_geonames_relationships
+        SELECT hierarchy.child_geoname_id,
+               hierarchy.parent_geoname_id,
+               COALESCE(hierarchy.relationship_type, 'hierarchy')
+        FROM places_geonames_hierarchy AS hierarchy
+        JOIN places_geonames AS child
+          ON child.geoname_id = hierarchy.child_geoname_id
+        JOIN places_geonames AS parent
+          ON parent.geoname_id = hierarchy.parent_geoname_id
+        WHERE hierarchy.child_geoname_id <> hierarchy.parent_geoname_id
+
+        UNION
+
+        SELECT child_geoname_id, parent_geoname_id, relationship_type
+        FROM administrative_relationships
+        WHERE parent_geoname_id IS NOT NULL
+
+        ON CONFLICT DO NOTHING;
+
+        CREATE INDEX IF NOT EXISTS places_geonames_relationships_parent_idx
+        ON places_geonames_relationships (parent_geoname_id);
+    """
+
+    def run(self):
+        super().run()
+        connection = self.output().connect()
+        try:
+            cursor = connection.cursor()
+            cursor.execute(f"SELECT COUNT(*) FROM {self.table}")
+            logger.info("Built %s GeoNames relationships", cursor.fetchone()[0])
+        finally:
+            connection.close()

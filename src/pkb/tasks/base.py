@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import luigi
-from luigi.contrib.postgres import CopyToTable
+from luigi.contrib.postgres import CopyToTable, PostgresQuery
 
 
 class BaseTask(luigi.Task):
@@ -37,7 +37,7 @@ class BaseTask(luigi.Task):
         return [output]
 
 
-class PostgresCopyToTableTask(CopyToTable):
+class _ForcePostgresTask:
     force = luigi.BoolParameter(default=False, significant=False)
 
     def complete(self):
@@ -59,3 +59,11 @@ class PostgresCopyToTableTask(CopyToTable):
             finally:
                 connection.close()
         return super().run()
+
+
+class PostgresCopyToTableTask(_ForcePostgresTask, CopyToTable):
+    pass
+
+
+class PostgresQueryTask(_ForcePostgresTask, PostgresQuery):
+    pass
