@@ -12,7 +12,12 @@ from pkb.storage.s3 import (
 )
 
 
-def iter_source_dataset_rows(manifest_path, archive_member=None, delimiter="\t"):
+def iter_source_dataset_rows(
+    manifest_path,
+    archive_member=None,
+    delimiter="\t",
+    encoding="utf-8",
+):
     dataset_version = read_dataset_version(manifest_path)
     data = fetch_source_dataset(
         s3=get_s3_client(),
@@ -28,10 +33,18 @@ def iter_source_dataset_rows(manifest_path, archive_member=None, delimiter="\t")
     if archive_member:
         with ZipFile(BytesIO(data)) as archive:
             with archive.open(archive_member) as source:
-                for row in iter_delimited_rows(source, delimiter=delimiter):
+                for row in iter_delimited_rows(
+                    source,
+                    delimiter=delimiter,
+                    encoding=encoding,
+                ):
                     yield row, version
     else:
-        for row in iter_delimited_rows(BytesIO(data), delimiter=delimiter):
+        for row in iter_delimited_rows(
+            BytesIO(data),
+            delimiter=delimiter,
+            encoding=encoding,
+        ):
             yield row, version
 
 
