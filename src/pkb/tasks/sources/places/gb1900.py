@@ -20,7 +20,7 @@ from pkb.tasks.base import BaseTask
 
 
 GB1900_FILENAME = "GB1900_gazetteer_complete_july_2018.zip"
-GB1900_URL = f"https://visionofbritain.org.uk/downloads/{GB1900_FILENAME}"
+GB1900_URL = f"https://www.visionofbritain.org.uk/downloads/{GB1900_FILENAME}"
 GB1900_SHA256 = "aa19b6f2d665e30c2e28a033399f4e8c2308d092e5f200cba714b85d664d2ac2"
 GB1900_SOURCE_DIR = settings.intermediate_dir / "sources" / "gb1900"
 

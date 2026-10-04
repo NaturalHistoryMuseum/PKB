@@ -17,6 +17,7 @@ from pkb.tasks.sources.places.gb1900 import GB1900PlacesSourceTask
 def test_gb1900_source_stores_archive(monkeypatch, tmp_path):
     import pkb.tasks.sources.places.gb1900 as task_module
 
+    assert task_module.GB1900_URL.startswith("https://www.visionofbritain.org.uk/")
     data = b"archive"
     progress = {}
 
