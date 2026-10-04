@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from pkb.models.places import search_geonames_candidates
+from pkb.models.places import search_gb1900_candidates, search_geonames_candidates
 
 
 COLUMNS = [
@@ -21,12 +21,25 @@ COLUMNS = [
     "name_score",
 ]
 
+GB1900_COLUMNS = [
+    "pin_id",
+    "name",
+    "nation",
+    "local_authority",
+    "parish",
+    "latitude",
+    "longitude",
+    "notes",
+    "exact_match",
+    "name_score",
+]
+
 
 class Cursor:
-    def __init__(self, responses):
+    def __init__(self, responses, columns):
         self.responses = iter(responses)
         self.queries = []
-        self.description = [SimpleNamespace(name=name) for name in COLUMNS]
+        self.description = [SimpleNamespace(name=name) for name in columns]
 
     def __enter__(self):
         return self
@@ -43,8 +56,8 @@ class Cursor:
 
 
 class Connection:
-    def __init__(self, responses):
-        self.cursor_instance = Cursor(responses)
+    def __init__(self, responses, columns=COLUMNS):
+        self.cursor_instance = Cursor(responses, columns)
 
     def cursor(self):
         return self.cursor_instance
@@ -94,3 +107,37 @@ def test_search_geonames_candidates_falls_back_to_fuzzy_search():
         "SET LOCAL pg_trgm.similarity_threshold = 0.6"
     )
     assert "search_name %% %(name)s" in connection.cursor_instance.queries[2][0]
+
+
+def test_search_gb1900_candidates_uses_bounds():
+    row = (
+        "abc123",
+        "America Woods",
+        "England",
+        "Isle of Wight",
+        "Shanklin",
+        50.6301,
+        -1.1752,
+        None,
+        True,
+        1.0,
+    )
+    bounds = {
+        "min_latitude": 50.5,
+        "max_latitude": 50.8,
+        "min_longitude": -1.7,
+        "max_longitude": -0.9,
+    }
+    connection = Connection([[row]], GB1900_COLUMNS)
+
+    candidates = search_gb1900_candidates(
+        connection, " America Woods ", bounds, limit=5
+    )
+
+    assert candidates[0]["pin_id"] == "abc123"
+    assert connection.cursor_instance.queries[0][1] == {
+        "name": "america woods",
+        "limit": 5,
+        **bounds,
+    }
+    assert "latitude BETWEEN" in connection.cursor_instance.queries[0][0]

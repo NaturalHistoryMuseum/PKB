@@ -64,6 +64,27 @@ SEARCH_QUERY = """
     LIMIT %(limit)s
 """
 
+GB1900_SEARCH_QUERY = """
+    SELECT pin_id,
+           name,
+           nation,
+           local_authority,
+           parish,
+           latitude,
+           longitude,
+           notes,
+           lower(name) = %(name)s AS exact_match,
+           similarity(lower(name), %(name)s) AS name_score
+    FROM places_gb1900
+    WHERE {predicate}
+      AND latitude BETWEEN %(min_latitude)s AND %(max_latitude)s
+      AND longitude BETWEEN %(min_longitude)s AND %(max_longitude)s
+    ORDER BY exact_match DESC,
+             name_score DESC,
+             pin_id
+    LIMIT %(limit)s
+"""
+
 
 def search_geonames_candidates(
     connection,
@@ -89,6 +110,35 @@ def search_geonames_candidates(
             cursor.execute("SET LOCAL pg_trgm.similarity_threshold = 0.6")
             cursor.execute(
                 SEARCH_QUERY.format(predicate="search_name %% %(name)s"), parameters
+            )
+            rows = cursor.fetchall()
+
+        columns = [column.name for column in cursor.description]
+        return [dict(zip(columns, row)) for row in rows]
+
+
+def search_gb1900_candidates(
+    connection,
+    name: str,
+    bounds: dict[str, float],
+    limit: int = 10,
+) -> list[dict]:
+    name = name.strip().lower()
+    if not name or limit < 1:
+        return []
+
+    parameters = {"name": name, "limit": limit, **bounds}
+    with connection.cursor() as cursor:
+        cursor.execute(
+            GB1900_SEARCH_QUERY.format(predicate="lower(name) = %(name)s"),
+            parameters,
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            cursor.execute("SET LOCAL pg_trgm.similarity_threshold = 0.6")
+            cursor.execute(
+                GB1900_SEARCH_QUERY.format(predicate="lower(name) %% %(name)s"),
+                parameters,
             )
             rows = cursor.fetchall()
 
