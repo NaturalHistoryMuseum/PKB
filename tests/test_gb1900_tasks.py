@@ -49,15 +49,19 @@ def test_gb1900_source_stores_archive(monkeypatch, tmp_path):
             pass
 
     calls = []
+    retries = []
     stored = {}
     monkeypatch.setattr(task_module, "GB1900_SOURCE_DIR", tmp_path)
     monkeypatch.setattr(task_module, "GB1900_SHA256", sha256(data).hexdigest())
     monkeypatch.setattr(task_module, "tqdm", Progress)
-    monkeypatch.setattr(
-        task_module.requests,
-        "get",
-        lambda *args, **kwargs: calls.append((args, kwargs)) or Response(),
-    )
+    def get(*args, **kwargs):
+        calls.append((args, kwargs))
+        if len(calls) == 1:
+            raise task_module.requests.ConnectionError("reset")
+        return Response()
+
+    monkeypatch.setattr(task_module.requests, "get", get)
+    monkeypatch.setattr(task_module, "sleep", retries.append)
     monkeypatch.setattr(task_module, "get_s3_client", lambda: "s3")
     monkeypatch.setattr(task_module, "ensure_source_bucket", lambda **kwargs: None)
 
@@ -85,12 +89,12 @@ def test_gb1900_source_stores_archive(monkeypatch, tmp_path):
     assert version["dataset"] == "gb1900_places"
     assert version["upstream_version"] == "July 2018"
     assert stored["key"] == f"gb1900/places/{task_module.GB1900_FILENAME}"
-    assert calls == [
-        (
-            (task_module.GB1900_URL,),
-            {"timeout": 1800, "stream": True, "verify": False},
-        )
-    ]
+    expected_call = (
+        (task_module.GB1900_URL,),
+        {"timeout": 1800, "stream": True, "verify": False},
+    )
+    assert calls == [expected_call, expected_call]
+    assert retries == [1]
     assert progress["downloaded"] == len(data)
 
 

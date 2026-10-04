@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from time import sleep
 import warnings
 
 import luigi
@@ -37,14 +38,22 @@ class GB1900PlacesSourceTask(BaseTask):
             "The GB1900 host has an incomplete TLS chain; validating the fixed "
             "archive against its pinned SHA-256"
         )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", InsecureRequestWarning)
-            response = requests.get(
-                GB1900_URL,
-                timeout=self.timeout_seconds,
-                stream=True,
-                verify=False,
-            )
+        for attempt in range(3):
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", InsecureRequestWarning)
+                    response = requests.get(
+                        GB1900_URL,
+                        timeout=self.timeout_seconds,
+                        stream=True,
+                        verify=False,
+                    )
+                break
+            except requests.ConnectionError:
+                if attempt == 2:
+                    raise
+                logger.warning("GB1900 connection failed; retrying")
+                sleep(2**attempt)
 
         data = bytearray()
         try:
